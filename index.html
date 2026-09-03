@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ESA Verification Assistant</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <h1 class="sidebar-title">ESA Call Guide</h1>
+      <nav id="nav-list" class="nav-list"><!-- se llena con app.js --></nav>
+    </aside>
+
+    <main class="content" id="content">
+      <!-- se llena con app.js -->
+    </main>
+  </div>
+
+  <!-- content.js debe cargar ANTES que app.js -->
+  <script src="content.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
