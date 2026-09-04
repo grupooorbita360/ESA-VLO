@@ -7,6 +7,17 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
+  <header class="topbar">
+    <div class="topbar-field">
+      <label for="agent-select">Agente</label>
+      <select id="agent-select"></select>
+    </div>
+    <div class="topbar-field">
+      <label for="contract-input">Contrato</label>
+      <input id="contract-input" type="text" placeholder="Ej. U12B-151510" />
+    </div>
+  </header>
+
   <div class="app">
     <aside class="sidebar">
       <h1 class="sidebar-title">ESA Call Guide</h1>
@@ -16,6 +27,10 @@
     <main class="content" id="content">
       <!-- se llena con app.js -->
     </main>
+
+    <aside class="right-panel" id="right-panel">
+      <!-- se llena con app.js -->
+    </aside>
   </div>
 
   <!-- content.js debe cargar ANTES que app.js -->
