@@ -15,6 +15,20 @@
 // ============================================================
 
 const CONTENT = {
+  // Lista de agentes para el selector de la barra superior.
+  // Edita este arreglo para agregar o quitar agentes.
+  agents: ["Selecciona un agente", "Agente 1", "Agente 2", "Agente 3"],
+
+  // Puntos de control críticos que se muestran en el panel derecho.
+  // sectionId: "" significa que todavía no tiene sección asignada —
+  // se queda marcado como pendiente hasta que se defina dónde vive.
+  criticalCheckpoints: [
+    { id: "kvc", label: "KVC check", sectionId: "" },
+    { id: "quiniela", label: "Quiniela", sectionId: "" },
+    { id: "credit-card", label: "Tarjeta de crédito", sectionId: "" },
+    { id: "tc", label: "T&C + Penalidades", sectionId: "terms" },
+  ],
+
   sections: [
     {
       id: "intro",
