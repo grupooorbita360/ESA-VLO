@@ -128,6 +128,22 @@ function evaluarOperador(operator, valorReal, valorEsperado) {
 }
 
 /**
+ * Reglas_[Programa] trae su propia condicion (Question_ID/Operator/Answer_Value)
+ * en la misma fila -- eso alcanza para la mayoria de las reglas (una sola condicion).
+ * Condiciones_Reglas guarda condiciones ADICIONALES para las reglas que necesitan
+ * mas de una (AND). Cuando el Operator de la propia fila es literalmente "AND",
+ * su Question_ID/Answer_Value es solo una etiqueta legible para humanos -- las
+ * condiciones reales de esa regla viven completas en Condiciones_Reglas.
+ */
+function condicionesDeRegla(regla, condicionesAdicionales) {
+  const opPropio = (regla.Operator || '').toString().trim().toUpperCase();
+  const propia = (regla.Question_ID && opPropio !== 'AND')
+    ? [{ Question_ID: regla.Question_ID, Operator: regla.Operator, Answer_Value: regla.Answer_Value }]
+    : [];
+  return propia.concat(condicionesAdicionales);
+}
+
+/**
  * respuestas: objeto { Question_ID: valor_contestado, ... }
  * Devuelve la lista de reglas cuyas condiciones (TODAS, es un AND) se cumplen,
  * ordenada por Priority descendente -- la primera es la que manda.
@@ -138,9 +154,10 @@ function evaluarReglas(programa, respuestas) {
 
   const disparadas = reglas.filter(regla => {
     if (!esVerdadero(regla.Active)) return false;
-    const cond = condiciones.filter(c => c.Rule_ID === regla.Rule_ID);
-    if (cond.length === 0) return false;
-    return cond.every(c => {
+    const adicionales = condiciones.filter(c => c.Rule_ID === regla.Rule_ID);
+    const todas = condicionesDeRegla(regla, adicionales);
+    if (todas.length === 0) return false;
+    return todas.every(c => {
       const valorReal = respuestas[c.Question_ID];
       if (valorReal === undefined) return false;
       return evaluarOperador(c.Operator, valorReal, c.Answer_Value);

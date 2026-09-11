@@ -1,7 +1,16 @@
 <script>
   // ============================================================
   // Estado en memoria de la llamada. Nada de esto se escribe al
-  // Sheet hasta que se llama a guardarLlamada() en el Checkpoint.
+  // Sheet hasta que se llama a guardarLlamada() en Fase 7 (Cierre).
+  //
+  // El Tipo real de Preguntas_[Programa] (Motor-VLO-USP) usa mas
+  // variantes que el vocabulario original: SCRIPT_VARIABLE / SCRIPT_KVC /
+  // SCRIPT_CONDICIONAL / REBUTTAL son variantes de SCRIPT; VERIFICACION /
+  // EXPLORATORIO / DISCOVERY / SONDEO / PREGUNTA son la misma UI de
+  // captura (chips si hay Opciones, texto libre si no). tipoCategoria()
+  // agrupa todo eso. El Checkpoint tampoco es una pantalla fija aparte:
+  // es la Fase "Checkpoint - Evaluacion VLO", con filas CALIFICACION_CALCULADA
+  // y FLAGS_CALCULADOS en su lugar natural del guion.
   // ============================================================
   const state = {
     programa: '',
@@ -11,13 +20,14 @@
     data: null,          // resultado de getDataInicial(programa)
     respuestas: {},       // Question_ID -> valor contestado
     variables: {},        // clave normalizada -> valor (Campos_Variables + topbar)
-    continuas: {},         // Question_ID (EVALUACION_CONTINUA) -> VERDE/NARANJA/ROJO
+    continuas: {},         // Question_ID (EVALUACION_CONTINUA) -> estado actual
     incidentes: [],        // [{Incidente_ID, Color, Resolucion, Pendiente}]
     fases: [],
     activeFase: '',
     startTime: null,
     reglasDisparadas: [],
-    checkpointOverride: null
+    checkpointOverride: null,
+    filaCalificacion: null
   };
 
   document.addEventListener('DOMContentLoaded', () => {
@@ -105,6 +115,31 @@
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
 
+  // Opciones viene como lista separada por "|" o "," segun la fila.
+  function separarOpciones(str) {
+    if (!str) return [];
+    const sep = str.toString().indexOf('|') !== -1 ? '|' : ',';
+    return str.toString().split(sep).map(s => s.trim()).filter(Boolean);
+  }
+
+  // Detecta el color de un texto de resultado por su emoji (🟢/🟠/🔴/⚠️).
+  function colorDeTexto(texto) {
+    if (!texto) return '';
+    if (texto.indexOf('🔴') !== -1) return 'red';
+    if (texto.indexOf('🟠') !== -1) return 'orange';
+    if (texto.indexOf('⚠️') !== -1) return 'orange';
+    if (texto.indexOf('🟢') !== -1) return 'green';
+    return '';
+  }
+
+  // Para EVALUACION_CONTINUA, cuyas Opciones son palabras planas (Verde/Naranja/Rojo).
+  function colorPorNombre(nombre) {
+    const t = (nombre || '').toString().toLowerCase();
+    if (t.indexOf('rojo') !== -1) return 'red';
+    if (t.indexOf('naranja') !== -1) return 'orange';
+    return 'green';
+  }
+
   function obtenerVariable(nombre) {
     const key = normalizeKey(nombre);
     if (state.variables[key] !== undefined && state.variables[key] !== '') return state.variables[key];
@@ -124,6 +159,10 @@
     });
   }
 
+  // Solo reconoce el formato documentado "Question_ID: Valor" (con "Y" como AND).
+  // Algunas filas del guion real usan texto libre en Mostrar_Si (p.ej. "Cliente
+  // divorciada", "Sigue diciendo No") que no sigue ese formato -- esas cláusulas
+  // no tienen forma de evaluarse automáticamente y se tratan como cumplidas.
   function cumpleMostrarSi(condicion) {
     if (!condicion) return true;
     const partes = condicion.toString().split(/\sY\s/i).map(s => s.trim()).filter(Boolean);
@@ -138,6 +177,25 @@
     });
   }
 
+  // ---- Tipos de contenido ----
+  // Agrupa las variantes reales de Tipo en las categorias de UI que renderizamos.
+
+  function tipoCategoria(tipo) {
+    const t = (tipo || '').toString().trim().toUpperCase();
+    if (['SCRIPT', 'SCRIPT_VARIABLE', 'SCRIPT_KVC', 'SCRIPT_CONDICIONAL', 'REBUTTAL'].indexOf(t) !== -1) return 'SCRIPT';
+    if (['VERIFICACION', 'EXPLORATORIO', 'DISCOVERY', 'PREGUNTA', 'SONDEO'].indexOf(t) !== -1) return 'PREGUNTA';
+    if (t === 'LIBRE') return 'LIBRE';
+    if (t === 'CAMPO_PASIVO') return 'CAMPO_PASIVO';
+    if (t === 'EVALUACION_AGENTE') return 'EVALUACION_AGENTE';
+    if (t === 'EVALUACION_CONTINUA') return 'EVALUACION_CONTINUA';
+    if (t === 'VERIFICACION_POR_INCIDENTE') return 'VERIFICACION_POR_INCIDENTE';
+    if (t === 'CALIFICACION_CALCULADA') return 'CALIFICACION_CALCULADA';
+    if (t === 'FLAGS_CALCULADOS') return 'FLAGS_CALCULADOS';
+    if (t === 'PANEL' || t === 'PANEL_INFO') return 'PANEL';
+    if (t === 'CONDICION_ENTRADA') return 'CONDICION_ENTRADA'; // documentacion, no se renderiza
+    return 'DESCONOCIDO';
+  }
+
   // ---- Sidebar / Fases ----
 
   function buildSidebar() {
@@ -146,12 +204,12 @@
       if (p.Fase && !fases.includes(p.Fase)) fases.push(p.Fase);
     });
     state.fases = fases;
-    state.activeFase = fases.find(faseHabilitada) || '';
+    state.activeFase = fases.find(faseHabilitada) || fases[0] || '';
     renderSidebarNav();
     renderContent();
   }
 
-  // La condición de entrada de una fase completa se resuelve en código,
+  // La condicion de entrada de una fase completa se resuelve en codigo,
   // nunca como fila de Preguntas_ (ej. Servicios solo si CONFIG_PRODUCTS.Services = YES).
   function faseHabilitada(fase) {
     const key = normalizeKey(fase);
@@ -169,35 +227,25 @@
       btn.onclick = () => { state.activeFase = fase; renderSidebarNav(); renderContent(); };
       sidebar.appendChild(btn);
     });
-    // El Checkpoint es una pantalla fija de la app, no una fila del Sheet.
-    const btnCheckpoint = document.createElement('button');
-    btnCheckpoint.className = 'nav-item' + (state.activeFase === '__CHECKPOINT__' ? ' active' : '');
-    btnCheckpoint.textContent = '✅ Checkpoint';
-    btnCheckpoint.onclick = irACheckpoint;
-    sidebar.appendChild(btnCheckpoint);
-  }
-
-  function irACheckpoint() {
-    state.activeFase = '__CHECKPOINT__';
-    renderSidebarNav();
-    renderCheckpoint();
   }
 
   // ---- Contenido de la fase activa ----
 
   function renderContent() {
-    if (state.activeFase === '__CHECKPOINT__') { renderCheckpoint(); return; }
     const content = document.getElementById('content');
     content.innerHTML = '';
     const filas = (state.data.preguntas || [])
-      .filter(p => p.Fase === state.activeFase && p.Tipo !== 'EVALUACION_CONTINUA')
+      .filter(p => p.Fase === state.activeFase && tipoCategoria(p.Tipo) !== 'EVALUACION_CONTINUA')
       .sort((a, b) => (Number(a.Orden) || 0) - (Number(b.Orden) || 0));
 
     let visibles = 0;
+    let necesitaEvaluacion = false;
     filas.forEach(fila => {
       if (!cumpleMostrarSi(fila.Mostrar_Si)) return;
       const el = renderFila(fila);
       if (el) { content.appendChild(el); visibles++; }
+      const cat = tipoCategoria(fila.Tipo);
+      if (cat === 'CALIFICACION_CALCULADA' || cat === 'FLAGS_CALCULADOS') necesitaEvaluacion = true;
     });
 
     if (!visibles) {
@@ -206,19 +254,28 @@
       vacio.textContent = 'No hay elementos para mostrar en esta fase todavía.';
       content.appendChild(vacio);
     }
+
+    if (necesitaEvaluacion) evaluarYActualizarCheckpoint();
+
+    // No hay fila de tipo ACCION para "guardar" en el guion real -- el cierre
+    // de la llamada se ofrece siempre al llegar a la ultima fase (Cierre).
+    if (state.activeFase === state.fases[state.fases.length - 1]) renderCierreFinal(content);
+
     renderPanel();
   }
 
   function renderFila(fila) {
-    switch (fila.Tipo) {
+    switch (tipoCategoria(fila.Tipo)) {
       case 'SCRIPT': return renderScript(fila);
-      case 'PREGUNTA': return renderPregunta(fila);
+      case 'PREGUNTA': return renderPreguntaOCaptura(fila);
       case 'LIBRE': return renderLibre(fila);
       case 'CAMPO_PASIVO': return renderCampoPasivo(fila);
       case 'EVALUACION_AGENTE': return renderEvaluacionAgente(fila);
-      case 'ACCION': return renderAccion(fila);
-      case 'PANEL_INFO': return renderPanelInfo(fila);
-      default: return null;
+      case 'VERIFICACION_POR_INCIDENTE': return renderVerificacionPorIncidente(fila);
+      case 'CALIFICACION_CALCULADA': return renderCalificacionCalculada(fila);
+      case 'FLAGS_CALCULADOS': return renderFlagsCalculados(fila);
+      case 'PANEL': return renderPanelInfo(fila);
+      default: return null; // CONDICION_ENTRADA y tipos no reconocidos: no se renderizan
     }
   }
 
@@ -232,7 +289,12 @@
     return div;
   }
 
-  function renderPregunta(fila) {
+  // Cubre VERIFICACION / EXPLORATORIO / DISCOVERY / PREGUNTA / SONDEO.
+  // Sin Opciones, es una captura abierta (misma UI que LIBRE).
+  function renderPreguntaOCaptura(fila) {
+    const opciones = separarOpciones(fila.Opciones);
+    if (!opciones.length) return renderLibre(fila);
+
     const div = document.createElement('div');
     div.className = 'block';
     const q = document.createElement('div');
@@ -242,8 +304,6 @@
 
     const opts = document.createElement('div');
     opts.className = 'options';
-    const separador = (fila.Opciones || '').indexOf('|') !== -1 ? '|' : ',';
-    const opciones = (fila.Opciones || '').toString().split(separador).map(s => s.trim()).filter(Boolean);
     opciones.forEach(op => {
       const chip = document.createElement('button');
       chip.className = 'option-chip' + (state.respuestas[fila.Question_ID] === op ? ' selected' : '');
@@ -307,45 +367,17 @@
 
     const wrap = document.createElement('div');
     wrap.className = 'eval-agente';
-    [
-      { valor: 'VERDE', label: '🟢', cls: 'sel-green' },
-      { valor: 'NARANJA', label: '🟠', cls: 'sel-orange' },
-      { valor: 'ROJO', label: '🔴', cls: 'sel-red' }
-    ].forEach(o => {
+    separarOpciones(fila.Opciones).forEach(op => {
+      const color = colorDeTexto(op);
+      const claseSel = color === 'red' ? 'sel-red' : color === 'orange' ? 'sel-orange' : color === 'green' ? 'sel-green' : '';
       const btn = document.createElement('button');
-      btn.className = 'eval-btn' + (state.respuestas[fila.Question_ID] === o.valor ? ' ' + o.cls : '');
-      btn.textContent = o.label;
-      btn.onclick = () => { state.respuestas[fila.Question_ID] = o.valor; renderContent(); };
+      btn.className = 'eval-btn' + (state.respuestas[fila.Question_ID] === op && claseSel ? ' ' + claseSel : '');
+      btn.textContent = op;
+      btn.onclick = () => { state.respuestas[fila.Question_ID] = op; renderContent(); };
       wrap.appendChild(btn);
     });
     div.appendChild(wrap);
     return div;
-  }
-
-  function renderAccion(fila) {
-    const div = document.createElement('div');
-    div.className = 'block';
-    const btn = document.createElement('button');
-    btn.className = 'action-btn';
-    btn.textContent = fila['Script / Pregunta'] || fila.Question_ID;
-    btn.onclick = () => ejecutarAccion(fila.Question_ID);
-    div.appendChild(btn);
-    return div;
-  }
-
-  // Las acciones se identifican por convención en el Question_ID
-  // (ej. ACCION_GUARDAR_LLAMADA, ACCION_NOTIFICAR_SUPERVISION).
-  function ejecutarAccion(questionId) {
-    const id = normalizeKey(questionId);
-    if (id.indexOf('GUARDAR') !== -1) { irACheckpoint(); return; }
-    if (id.indexOf('NOTIFIC') !== -1 || id.indexOf('SUPERVIS') !== -1) {
-      state.respuestas[questionId] = 'NOTIFICADO_' + new Date().toISOString();
-      alert('Se registró la notificación a Supervisión.');
-      renderPanel();
-      return;
-    }
-    state.respuestas[questionId] = 'EJECUTADO_' + new Date().toISOString();
-    renderPanel();
   }
 
   function renderPanelInfo(fila) {
@@ -356,6 +388,222 @@
     box.innerHTML = interpolar(fila['Script / Pregunta'] || '');
     div.appendChild(box);
     return div;
+  }
+
+  // ---- Incidentes (revision en vivo, fila VERIFICACION_POR_INCIDENTE) ----
+
+  function renderVerificacionPorIncidente(fila) {
+    const div = document.createElement('div');
+    div.className = 'block';
+    const label = document.createElement('div');
+    label.className = 'question-text';
+    label.innerHTML = interpolar(fila['Script / Pregunta'] || '');
+    div.appendChild(label);
+
+    const opcionesResolucion = separarOpciones(fila.Opciones);
+    const lista = document.createElement('div');
+    lista.id = 'lista-incidentes';
+    div.appendChild(lista);
+    renderListaIncidentes(opcionesResolucion);
+
+    const addWrap = document.createElement('div');
+    addWrap.className = 'options';
+    addWrap.style.marginTop = '8px';
+    const selInc = document.createElement('select');
+    selInc.className = 'free-text';
+    const vacio = document.createElement('option');
+    vacio.value = '';
+    vacio.textContent = 'Agregar incidente...';
+    selInc.appendChild(vacio);
+    (state.data.incidentesCatalogo || []).forEach(inc => {
+      const opt = document.createElement('option');
+      opt.value = inc.Incidente_ID;
+      opt.textContent = inc.Incidente_ID + ' — ' + (inc.Descripcion || '');
+      selInc.appendChild(opt);
+    });
+    selInc.onchange = () => {
+      if (selInc.value) { agregarIncidente(selInc.value, opcionesResolucion); selInc.value = ''; }
+    };
+    addWrap.appendChild(selInc);
+    div.appendChild(addWrap);
+    return div;
+  }
+
+  function agregarIncidente(incidenteId, opcionesResolucion) {
+    const def = (state.data.incidentesCatalogo || []).find(i => i.Incidente_ID === incidenteId);
+    state.incidentes.push({
+      Incidente_ID: incidenteId,
+      Color: def ? def.Color_Sugerido : '',
+      Resolucion: '',
+      Pendiente: def ? def.Requiere_Seguimiento : ''
+    });
+    renderListaIncidentes(opcionesResolucion);
+  }
+
+  function quitarIncidente(index, opcionesResolucion) {
+    state.incidentes.splice(index, 1);
+    renderListaIncidentes(opcionesResolucion);
+  }
+
+  function renderListaIncidentes(opcionesResolucion) {
+    const container = document.getElementById('lista-incidentes');
+    if (!container) return;
+    container.innerHTML = '';
+    if (!state.incidentes.length) {
+      const vacio = document.createElement('div');
+      vacio.className = 'empty-state';
+      vacio.textContent = 'Sin incidentes registrados en esta llamada.';
+      container.appendChild(vacio);
+      return;
+    }
+    state.incidentes.forEach((inc, idx) => {
+      const item = document.createElement('div');
+      item.className = 'checklist-item';
+      const texto = document.createElement('span');
+      texto.textContent = inc.Incidente_ID + (inc.Color ? ' (' + inc.Color + ')' : '');
+      item.appendChild(texto);
+
+      (opcionesResolucion || []).forEach(op => {
+        const chip = document.createElement('button');
+        chip.className = 'option-chip' + (inc.Resolucion === op ? ' selected' : '');
+        chip.textContent = op;
+        chip.onclick = () => { inc.Resolucion = op; renderListaIncidentes(opcionesResolucion); };
+        item.appendChild(chip);
+      });
+
+      const quitar = document.createElement('button');
+      quitar.className = 'btn-mini btn-danger';
+      quitar.textContent = 'Quitar';
+      quitar.onclick = () => quitarIncidente(idx, opcionesResolucion);
+      item.appendChild(quitar);
+      container.appendChild(item);
+    });
+  }
+
+  // ---- Checkpoint (Fase "Checkpoint - Evaluacion VLO": CALIFICACION_CALCULADA + FLAGS_CALCULADOS) ----
+
+  function renderCalificacionCalculada(fila) {
+    state.filaCalificacion = fila;
+    const div = document.createElement('div');
+    div.className = 'checkpoint-card';
+    div.id = 'calificacion-box';
+    div.innerHTML = '<div class="empty-state">Evaluando reglas...</div>';
+    return div;
+  }
+
+  function renderFlagsCalculados(fila) {
+    const div = document.createElement('div');
+    div.className = 'block';
+    const label = document.createElement('div');
+    label.className = 'block-label';
+    label.textContent = fila['Script / Pregunta'] || 'Flags detectados';
+    div.appendChild(label);
+    const box = document.createElement('div');
+    box.id = 'flags-content';
+    box.className = 'empty-state';
+    box.textContent = 'Evaluando...';
+    div.appendChild(box);
+    return div;
+  }
+
+  function evaluarYActualizarCheckpoint() {
+    state.checkpointOverride = null;
+    google.script.run.withSuccessHandler(mostrarCheckpoint).withFailureHandler(onError)
+      .evaluarReglas(state.programa, state.respuestas);
+  }
+
+  function mostrarCheckpoint(reglasDisparadas) {
+    state.reglasDisparadas = reglasDisparadas || [];
+    const reglaGanadora = state.reglasDisparadas[0] || null;
+    state.checkpointOverride = reglaGanadora ? reglaGanadora.Result : '';
+    actualizarCajaCalificacion(reglaGanadora);
+    actualizarCajaFlags();
+  }
+
+  function actualizarCajaCalificacion(reglaGanadora) {
+    const box = document.getElementById('calificacion-box');
+    if (!box) return;
+    box.innerHTML = '';
+
+    const colorMap = { green: 'var(--green)', orange: 'var(--orange)', red: 'var(--red)' };
+    const badge = document.createElement('span');
+    badge.className = 'result-badge';
+    badge.style.background = colorMap[colorDeTexto(state.checkpointOverride)] || '#9aa4b2';
+    badge.style.color = '#fff';
+    badge.textContent = state.checkpointOverride || 'Sin regla disparada';
+    box.appendChild(badge);
+
+    if (reglaGanadora) {
+      const razon = document.createElement('p');
+      razon.innerHTML = '<strong>Razón interna:</strong> ' + escapeHtml(reglaGanadora.Internal_Reason || '');
+      box.appendChild(razon);
+
+      if (reglaGanadora.ESA_Validation && esVerdadero(reglaGanadora.ESA_Validation)) {
+        const esa = document.createElement('p');
+        esa.innerHTML = '<strong>Validación ESA:</strong> ' + escapeHtml(reglaGanadora.ESA_Validation);
+        box.appendChild(esa);
+      }
+      if (reglaGanadora.Customer_Message) {
+        const msg = document.createElement('div');
+        msg.className = 'script-text';
+        msg.innerHTML = interpolar(reglaGanadora.Customer_Message);
+        box.appendChild(msg);
+      }
+      if (reglaGanadora.Next_Action) {
+        const next = document.createElement('p');
+        next.innerHTML = '<strong>Siguiente acción:</strong> ' + escapeHtml(reglaGanadora.Next_Action);
+        box.appendChild(next);
+      }
+    } else {
+      const sinRegla = document.createElement('p');
+      sinRegla.className = 'empty-state';
+      sinRegla.textContent = 'Ninguna regla se disparó con las respuestas actuales.';
+      box.appendChild(sinRegla);
+    }
+
+    const ajusteLabel = document.createElement('div');
+    ajusteLabel.className = 'block-label';
+    ajusteLabel.style.marginTop = '14px';
+    ajusteLabel.textContent = 'Confirmar o ajustar calificación';
+    box.appendChild(ajusteLabel);
+
+    const select = document.createElement('select');
+    select.className = 'free-text';
+    const opciones = separarOpciones(state.filaCalificacion ? state.filaCalificacion.Opciones : '');
+    opciones.forEach(codigo => {
+      const opt = document.createElement('option');
+      opt.value = codigo;
+      opt.textContent = codigo;
+      if (codigo === state.checkpointOverride) opt.selected = true;
+      select.appendChild(opt);
+    });
+    select.onchange = () => {
+      state.checkpointOverride = select.value;
+      actualizarCajaCalificacion(reglaGanadora);
+    };
+    box.appendChild(select);
+  }
+
+  // Solo se pueden calcular con certeza los flags que vienen de reglas con
+  // Show_Alert -- los Green_Flag/Red_Flag descritos en Notes_[Programa] son
+  // referencia para quien mantiene la hoja, no una condicion evaluable.
+  function actualizarCajaFlags() {
+    const box = document.getElementById('flags-content');
+    if (!box) return;
+    box.innerHTML = '';
+    const conAlerta = (state.reglasDisparadas || []).filter(r => esVerdadero(r.Show_Alert));
+    if (!conAlerta.length) {
+      box.className = 'empty-state';
+      box.textContent = 'Sin flags detectados.';
+      return;
+    }
+    box.className = '';
+    conAlerta.forEach(r => {
+      const item = document.createElement('div');
+      item.className = 'checklist-item';
+      item.textContent = (r.Category || r.Rule_ID) + ': ' + (r.Internal_Reason || r.Result);
+      box.appendChild(item);
+    });
   }
 
   // ---- Panel derecho ----
@@ -369,7 +617,7 @@
     tituloEval.textContent = 'Evaluación continua';
     panel.appendChild(tituloEval);
 
-    const continuas = (state.data.preguntas || []).filter(p => p.Tipo === 'EVALUACION_CONTINUA');
+    const continuas = (state.data.preguntas || []).filter(p => tipoCategoria(p.Tipo) === 'EVALUACION_CONTINUA');
     if (!continuas.length) {
       const vacio = document.createElement('div');
       vacio.className = 'empty-state';
@@ -377,17 +625,22 @@
       panel.appendChild(vacio);
     }
     continuas.forEach(fila => {
-      if (state.continuas[fila.Question_ID] === undefined) state.continuas[fila.Question_ID] = 'VERDE';
+      const opciones = separarOpciones(fila.Opciones).map(o => o.replace(/\s*\(default\)\s*/i, '').trim());
+      if (!opciones.length) opciones.push('Verde');
+      if (state.continuas[fila.Question_ID] === undefined) state.continuas[fila.Question_ID] = opciones[0];
+
       const row = document.createElement('div');
       row.className = 'rp-eval-row';
       const label = document.createElement('span');
       label.textContent = fila['Script / Pregunta'] || fila.Question_ID;
+      const valorActual = state.continuas[fila.Question_ID];
       const dot = document.createElement('span');
-      dot.className = 'dot dot-' + colorClase(state.continuas[fila.Question_ID]);
+      dot.className = 'dot dot-' + (colorDeTexto(valorActual) || colorPorNombre(valorActual));
       dot.style.cursor = 'pointer';
-      dot.title = 'Click para cambiar estado';
+      dot.title = valorActual + ' -- click para cambiar';
       dot.onclick = () => {
-        state.continuas[fila.Question_ID] = siguienteColor(state.continuas[fila.Question_ID]);
+        const idx = opciones.indexOf(state.continuas[fila.Question_ID]);
+        state.continuas[fila.Question_ID] = opciones[(idx + 1) % opciones.length];
         state.respuestas[fila.Question_ID] = state.continuas[fila.Question_ID];
         renderPanel();
       };
@@ -420,165 +673,12 @@
     }
   }
 
-  function colorClase(valor) {
-    if (valor === 'ROJO') return 'red';
-    if (valor === 'NARANJA') return 'orange';
-    return 'green';
-  }
+  // ---- Cierre (Fase 7: duracion + guardar) ----
 
-  function siguienteColor(valor) {
-    if (valor === 'VERDE') return 'NARANJA';
-    if (valor === 'NARANJA') return 'ROJO';
-    return 'VERDE';
-  }
-
-  // ---- Checkpoint (pantalla fija: Calificación / Flags / Incidentes) ----
-
-  function renderCheckpoint() {
-    const content = document.getElementById('content');
-    content.innerHTML = '';
-    const cargando = document.createElement('div');
-    cargando.className = 'empty-state';
-    cargando.textContent = 'Evaluando reglas...';
-    content.appendChild(cargando);
-
-    state.checkpointOverride = null;
-    google.script.run.withSuccessHandler(mostrarCheckpoint).withFailureHandler(onError)
-      .evaluarReglas(state.programa, state.respuestas);
-  }
-
-  // Clasificacion tiene columnas que no conocemos de antemano en el cliente;
-  // por convención el primer campo de cada fila es el código de resultado,
-  // que es el mismo valor que Reglas_[Programa].Result guarda.
-  function codigoDe(row) { return Object.values(row)[0]; }
-
-  function buscarClasificacion(codigo) {
-    if (!codigo) return null;
-    return (state.data.clasificacion || []).find(row => codigoDe(row) === codigo) || null;
-  }
-
-  function colorDeClasificacion(row) {
-    if (!row) return '';
-    const texto = Object.values(row).join(' ');
-    if (texto.indexOf('🔴') !== -1) return 'red';
-    if (texto.indexOf('🟠') !== -1) return 'orange';
-    if (texto.indexOf('⚠️') !== -1) return 'orange';
-    if (texto.indexOf('🟢') !== -1) return 'green';
-    return '';
-  }
-
-  function mostrarCheckpoint(reglasDisparadas) {
-    state.reglasDisparadas = reglasDisparadas || [];
-    const reglaGanadora = state.reglasDisparadas[0] || null;
-    if (state.checkpointOverride === null) {
-      state.checkpointOverride = reglaGanadora ? reglaGanadora.Result : '';
-    }
-    renderCheckpointCard(reglaGanadora);
-  }
-
-  function renderCheckpointCard(reglaGanadora) {
-    const content = document.getElementById('content');
-    content.innerHTML = '';
-
-    const card = document.createElement('div');
-    card.className = 'checkpoint-card';
-
-    const clasifRow = buscarClasificacion(state.checkpointOverride);
-    const color = colorDeClasificacion(clasifRow);
-    const colorMap = { green: 'var(--green)', orange: 'var(--orange)', red: 'var(--red)' };
-    const badge = document.createElement('span');
-    badge.className = 'result-badge';
-    badge.style.background = colorMap[color] || '#9aa4b2';
-    badge.style.color = '#fff';
-    badge.textContent = state.checkpointOverride || 'Sin regla disparada';
-    card.appendChild(badge);
-
-    if (reglaGanadora) {
-      const razon = document.createElement('p');
-      razon.innerHTML = '<strong>Razón interna:</strong> ' + escapeHtml(reglaGanadora.Internal_Reason || '');
-      card.appendChild(razon);
-
-      if (reglaGanadora.ESA_Validation) {
-        const esa = document.createElement('p');
-        esa.innerHTML = '<strong>Validación ESA:</strong> ' + escapeHtml(reglaGanadora.ESA_Validation);
-        card.appendChild(esa);
-      }
-      if (reglaGanadora.Customer_Message) {
-        const msg = document.createElement('div');
-        msg.className = 'script-text';
-        msg.innerHTML = interpolar(reglaGanadora.Customer_Message);
-        card.appendChild(msg);
-      }
-      if (reglaGanadora.Next_Action) {
-        const next = document.createElement('p');
-        next.innerHTML = '<strong>Siguiente acción:</strong> ' + escapeHtml(reglaGanadora.Next_Action);
-        card.appendChild(next);
-      }
-    } else {
-      const sinRegla = document.createElement('p');
-      sinRegla.className = 'empty-state';
-      sinRegla.textContent = 'Ninguna regla se disparó con las respuestas actuales.';
-      card.appendChild(sinRegla);
-    }
-
-    const ajusteLabel = document.createElement('div');
-    ajusteLabel.className = 'block-label';
-    ajusteLabel.style.marginTop = '14px';
-    ajusteLabel.textContent = 'Confirmar o ajustar calificación';
-    card.appendChild(ajusteLabel);
-
-    const select = document.createElement('select');
-    select.className = 'free-text';
-    (state.data.clasificacion || []).forEach(row => {
-      const codigo = codigoDe(row);
-      const opt = document.createElement('option');
-      opt.value = codigo;
-      opt.textContent = codigo;
-      if (codigo === state.checkpointOverride) opt.selected = true;
-      select.appendChild(opt);
-    });
-    select.onchange = () => {
-      state.checkpointOverride = select.value;
-      renderCheckpointCard(reglaGanadora);
-    };
-    card.appendChild(select);
-
-    const incLabel = document.createElement('div');
-    incLabel.className = 'block-label';
-    incLabel.style.marginTop = '18px';
-    incLabel.textContent = 'Incidentes detectados';
-    card.appendChild(incLabel);
-
-    const incList = document.createElement('div');
-    incList.id = 'lista-incidentes';
-    card.appendChild(incList);
-    renderListaIncidentes();
-
-    const addWrap = document.createElement('div');
-    addWrap.className = 'options';
-    addWrap.style.marginTop = '8px';
-    const selInc = document.createElement('select');
-    selInc.className = 'free-text';
-    const vacio = document.createElement('option');
-    vacio.value = '';
-    vacio.textContent = 'Agregar incidente...';
-    selInc.appendChild(vacio);
-    (state.data.incidentesCatalogo || []).forEach(inc => {
-      const opt = document.createElement('option');
-      opt.value = inc.Incidente_ID;
-      opt.textContent = inc.Incidente_ID + ' — ' + (inc.Descripcion || '');
-      selInc.appendChild(opt);
-    });
-    selInc.onchange = () => {
-      if (selInc.value) { agregarIncidente(selInc.value); selInc.value = ''; }
-    };
-    addWrap.appendChild(selInc);
-    card.appendChild(addWrap);
-
-    content.appendChild(card);
-
+  function renderCierreFinal(content) {
     const duracionLabel = document.createElement('div');
     duracionLabel.className = 'block-label';
+    duracionLabel.style.marginTop = '18px';
     duracionLabel.textContent = 'Duración de la llamada (minutos)';
     content.appendChild(duracionLabel);
 
@@ -591,52 +691,10 @@
 
     const guardarBtn = document.createElement('button');
     guardarBtn.className = 'action-btn';
-    guardarBtn.style.marginTop = '18px';
+    guardarBtn.style.marginTop = '12px';
     guardarBtn.textContent = 'Guardar llamada';
     guardarBtn.onclick = () => finalizarLlamada(duracionInput.value);
     content.appendChild(guardarBtn);
-  }
-
-  function agregarIncidente(incidenteId) {
-    const def = (state.data.incidentesCatalogo || []).find(i => i.Incidente_ID === incidenteId);
-    state.incidentes.push({
-      Incidente_ID: incidenteId,
-      Color: def ? def.Color_Sugerido : '',
-      Resolucion: '',
-      Pendiente: def ? def.Requiere_Seguimiento : ''
-    });
-    renderListaIncidentes();
-  }
-
-  function quitarIncidente(index) {
-    state.incidentes.splice(index, 1);
-    renderListaIncidentes();
-  }
-
-  function renderListaIncidentes() {
-    const container = document.getElementById('lista-incidentes');
-    if (!container) return;
-    container.innerHTML = '';
-    if (!state.incidentes.length) {
-      const vacio = document.createElement('div');
-      vacio.className = 'empty-state';
-      vacio.textContent = 'Sin incidentes registrados en esta llamada.';
-      container.appendChild(vacio);
-      return;
-    }
-    state.incidentes.forEach((inc, idx) => {
-      const item = document.createElement('div');
-      item.className = 'checklist-item';
-      const texto = document.createElement('span');
-      texto.textContent = inc.Incidente_ID + (inc.Color ? ' (' + inc.Color + ')' : '');
-      const quitar = document.createElement('button');
-      quitar.className = 'btn-mini btn-danger';
-      quitar.textContent = 'Quitar';
-      quitar.onclick = () => quitarIncidente(idx);
-      item.appendChild(texto);
-      item.appendChild(quitar);
-      container.appendChild(item);
-    });
   }
 
   function calcularDuracionMinutos() {
@@ -683,9 +741,7 @@
     const normKey = normalizeKey(key);
     state.variables[normKey] = value;
     if (normKey === 'CLIENT_NAME') state.cliente = value;
-    if (state.data && state.activeFase) {
-      if (state.activeFase !== '__CHECKPOINT__') renderContent();
-    }
+    if (state.data && state.activeFase) renderContent();
   }
 
   function buscarHistorico() {
