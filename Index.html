@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <?!= include('Stylesheet'); ?>
+</head>
+<body>
+
+  <!-- Pantalla de inicio: agente + programa -->
+  <div id="lock-screen" class="lock-screen">
+    <div class="lock-card">
+      <h2>Verification Copilot</h2>
+      <label>Agente</label>
+      <select id="sel-agente"><option value="">Cargando...</option></select>
+      <label>Programa</label>
+      <select id="sel-programa"><option value="">Cargando...</option></select>
+      <button id="btn-iniciar" onclick="iniciar()">Iniciar</button>
+    </div>
+  </div>
+
+  <!-- App principal -->
+  <div id="app" class="app" style="display:none;">
+
+    <header class="topbar">
+      <div class="topbar-field"><span class="tb-label">Agente</span><span id="tb-agente">--</span></div>
+      <div class="topbar-field"><span class="tb-label">Programa</span><span id="tb-programa">--</span></div>
+      <div class="topbar-field"><span class="tb-label">Contrato</span>
+        <input id="tb-contrato" type="text" placeholder="Escribe o busca..." oninput="onContratoChange(this.value)">
+        <button class="btn-mini" onclick="buscarHistorico()">Buscar</button>
+      </div>
+      <div class="topbar-field"><span class="tb-label">Cliente</span>
+        <input id="tb-cliente" type="text" oninput="onVariableChange('CLIENT_NAME', this.value)">
+      </div>
+      <button class="btn-mini btn-danger" onclick="location.reload()">Reiniciar</button>
+    </header>
+
+    <div class="body-grid">
+      <aside class="sidebar" id="sidebar"></aside>
+      <main class="content" id="content"></main>
+      <aside class="right-panel" id="right-panel"></aside>
+    </div>
+  </div>
+
+  <?!= include('JavaScript'); ?>
+</body>
+</html>

@@ -1,0 +1,710 @@
+<script>
+  // ============================================================
+  // Estado en memoria de la llamada. Nada de esto se escribe al
+  // Sheet hasta que se llama a guardarLlamada() en el Checkpoint.
+  // ============================================================
+  const state = {
+    programa: '',
+    agente: '',
+    contrato: '',
+    cliente: '',
+    data: null,          // resultado de getDataInicial(programa)
+    respuestas: {},       // Question_ID -> valor contestado
+    variables: {},        // clave normalizada -> valor (Campos_Variables + topbar)
+    continuas: {},         // Question_ID (EVALUACION_CONTINUA) -> VERDE/NARANJA/ROJO
+    incidentes: [],        // [{Incidente_ID, Color, Resolucion, Pendiente}]
+    fases: [],
+    activeFase: '',
+    startTime: null,
+    reglasDisparadas: [],
+    checkpointOverride: null
+  };
+
+  document.addEventListener('DOMContentLoaded', () => {
+    google.script.run.withSuccessHandler(onProgramasCargados).withFailureHandler(onError).getProgramasActivos();
+  });
+
+  function onError(err) {
+    console.error(err);
+    alert('Error: ' + (err && err.message ? err.message : err));
+  }
+
+  // ---- Carga inicial (lock screen) ----
+
+  function onProgramasCargados(programas) {
+    state.programasActivos = programas || [];
+    const sel = document.getElementById('sel-programa');
+    sel.innerHTML = '';
+    if (!state.programasActivos.length) {
+      sel.innerHTML = '<option value="">Sin programas activos</option>';
+      return;
+    }
+    state.programasActivos.forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p['Product/Program'];
+      opt.textContent = p['Product/Program'];
+      sel.appendChild(opt);
+    });
+    sel.onchange = () => cargarDatosPrograma(sel.value);
+    cargarDatosPrograma(sel.value);
+  }
+
+  function cargarDatosPrograma(programa) {
+    const selAgente = document.getElementById('sel-agente');
+    selAgente.innerHTML = '<option value="">Cargando...</option>';
+    google.script.run.withSuccessHandler(onDataInicial).withFailureHandler(onError).getDataInicial(programa);
+  }
+
+  function onDataInicial(data) {
+    if (data && data.error) { onError(data.error); return; }
+    state.data = data;
+    const selAgente = document.getElementById('sel-agente');
+    selAgente.innerHTML = '';
+    (data.agentes || []).forEach(nombre => {
+      const opt = document.createElement('option');
+      opt.value = nombre;
+      opt.textContent = nombre;
+      selAgente.appendChild(opt);
+    });
+  }
+
+  function iniciar() {
+    const agente = document.getElementById('sel-agente').value;
+    const programa = document.getElementById('sel-programa').value;
+    if (!agente || !programa) { alert('Selecciona agente y programa.'); return; }
+    if (!state.data || !state.data.config || state.data.config['Product/Program'] !== programa) {
+      alert('Los datos del programa todavía están cargando, intenta de nuevo en un momento.');
+      return;
+    }
+    state.agente = agente;
+    state.programa = programa;
+    state.startTime = Date.now();
+    document.getElementById('tb-agente').textContent = agente;
+    document.getElementById('tb-programa').textContent = programa;
+    document.getElementById('lock-screen').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    buildSidebar();
+  }
+
+  // ---- Utilidades ----
+
+  function normalizeKey(str) {
+    return (str || '').toString().toUpperCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^A-Z0-9]/g, '_');
+  }
+
+  function esVerdadero(v) {
+    if (v === true) return true;
+    const t = (v || '').toString().trim().toUpperCase();
+    return t === 'TRUE' || t === 'SI' || t === 'YES';
+  }
+
+  function escapeHtml(s) {
+    return (s || '').toString()
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  function obtenerVariable(nombre) {
+    const key = normalizeKey(nombre);
+    if (state.variables[key] !== undefined && state.variables[key] !== '') return state.variables[key];
+    const qid = Object.keys(state.respuestas).find(k => normalizeKey(k) === key);
+    if (qid !== undefined && state.respuestas[qid] !== '') return state.respuestas[qid];
+    return undefined;
+  }
+
+  // Reemplaza {{Variable}} por su valor actual; si falta, marca el hueco
+  // en vez de fallar en silencio -- el agente necesita notar qué falta.
+  function interpolar(texto) {
+    const conSaltos = escapeHtml(texto).replace(/\n/g, '<br>');
+    return conSaltos.replace(/\{\{\s*([^}]+?)\s*\}\}/g, (m, nombre) => {
+      const valor = obtenerVariable(nombre);
+      if (valor === undefined) return '<span class="var-missing">[' + escapeHtml(nombre.trim()) + ']</span>';
+      return escapeHtml(valor);
+    });
+  }
+
+  function cumpleMostrarSi(condicion) {
+    if (!condicion) return true;
+    const partes = condicion.toString().split(/\sY\s/i).map(s => s.trim()).filter(Boolean);
+    return partes.every(cond => {
+      const idx = cond.indexOf(':');
+      if (idx === -1) return true;
+      const qid = cond.slice(0, idx).trim();
+      const esperado = cond.slice(idx + 1).trim();
+      const real = state.respuestas[qid] !== undefined ? state.respuestas[qid] : state.continuas[qid];
+      if (real === undefined) return false;
+      return real.toString().trim().toUpperCase() === esperado.toUpperCase();
+    });
+  }
+
+  // ---- Sidebar / Fases ----
+
+  function buildSidebar() {
+    const fases = [];
+    (state.data.preguntas || []).forEach(p => {
+      if (p.Fase && !fases.includes(p.Fase)) fases.push(p.Fase);
+    });
+    state.fases = fases;
+    state.activeFase = fases.find(faseHabilitada) || '';
+    renderSidebarNav();
+    renderContent();
+  }
+
+  // La condición de entrada de una fase completa se resuelve en código,
+  // nunca como fila de Preguntas_ (ej. Servicios solo si CONFIG_PRODUCTS.Services = YES).
+  function faseHabilitada(fase) {
+    const key = normalizeKey(fase);
+    if (key.indexOf('SERVICIO') !== -1) return esVerdadero(state.data.config.Services);
+    return true;
+  }
+
+  function renderSidebarNav() {
+    const sidebar = document.getElementById('sidebar');
+    sidebar.innerHTML = '';
+    state.fases.filter(faseHabilitada).forEach(fase => {
+      const btn = document.createElement('button');
+      btn.className = 'nav-item' + (fase === state.activeFase ? ' active' : '');
+      btn.textContent = fase;
+      btn.onclick = () => { state.activeFase = fase; renderSidebarNav(); renderContent(); };
+      sidebar.appendChild(btn);
+    });
+    // El Checkpoint es una pantalla fija de la app, no una fila del Sheet.
+    const btnCheckpoint = document.createElement('button');
+    btnCheckpoint.className = 'nav-item' + (state.activeFase === '__CHECKPOINT__' ? ' active' : '');
+    btnCheckpoint.textContent = '✅ Checkpoint';
+    btnCheckpoint.onclick = irACheckpoint;
+    sidebar.appendChild(btnCheckpoint);
+  }
+
+  function irACheckpoint() {
+    state.activeFase = '__CHECKPOINT__';
+    renderSidebarNav();
+    renderCheckpoint();
+  }
+
+  // ---- Contenido de la fase activa ----
+
+  function renderContent() {
+    if (state.activeFase === '__CHECKPOINT__') { renderCheckpoint(); return; }
+    const content = document.getElementById('content');
+    content.innerHTML = '';
+    const filas = (state.data.preguntas || [])
+      .filter(p => p.Fase === state.activeFase && p.Tipo !== 'EVALUACION_CONTINUA')
+      .sort((a, b) => (Number(a.Orden) || 0) - (Number(b.Orden) || 0));
+
+    let visibles = 0;
+    filas.forEach(fila => {
+      if (!cumpleMostrarSi(fila.Mostrar_Si)) return;
+      const el = renderFila(fila);
+      if (el) { content.appendChild(el); visibles++; }
+    });
+
+    if (!visibles) {
+      const vacio = document.createElement('div');
+      vacio.className = 'empty-state';
+      vacio.textContent = 'No hay elementos para mostrar en esta fase todavía.';
+      content.appendChild(vacio);
+    }
+    renderPanel();
+  }
+
+  function renderFila(fila) {
+    switch (fila.Tipo) {
+      case 'SCRIPT': return renderScript(fila);
+      case 'PREGUNTA': return renderPregunta(fila);
+      case 'LIBRE': return renderLibre(fila);
+      case 'CAMPO_PASIVO': return renderCampoPasivo(fila);
+      case 'EVALUACION_AGENTE': return renderEvaluacionAgente(fila);
+      case 'ACCION': return renderAccion(fila);
+      case 'PANEL_INFO': return renderPanelInfo(fila);
+      default: return null;
+    }
+  }
+
+  function renderScript(fila) {
+    const div = document.createElement('div');
+    div.className = 'block';
+    const box = document.createElement('div');
+    box.className = 'script-text';
+    box.innerHTML = interpolar(fila['Script / Pregunta'] || '');
+    div.appendChild(box);
+    return div;
+  }
+
+  function renderPregunta(fila) {
+    const div = document.createElement('div');
+    div.className = 'block';
+    const q = document.createElement('div');
+    q.className = 'question-text';
+    q.innerHTML = interpolar(fila['Script / Pregunta'] || '');
+    div.appendChild(q);
+
+    const opts = document.createElement('div');
+    opts.className = 'options';
+    const separador = (fila.Opciones || '').indexOf('|') !== -1 ? '|' : ',';
+    const opciones = (fila.Opciones || '').toString().split(separador).map(s => s.trim()).filter(Boolean);
+    opciones.forEach(op => {
+      const chip = document.createElement('button');
+      chip.className = 'option-chip' + (state.respuestas[fila.Question_ID] === op ? ' selected' : '');
+      chip.textContent = op;
+      chip.onclick = () => { state.respuestas[fila.Question_ID] = op; renderContent(); };
+      opts.appendChild(chip);
+    });
+    div.appendChild(opts);
+    return div;
+  }
+
+  function renderLibre(fila) {
+    const div = document.createElement('div');
+    div.className = 'block';
+    const q = document.createElement('div');
+    q.className = 'question-text';
+    q.innerHTML = interpolar(fila['Script / Pregunta'] || '');
+    div.appendChild(q);
+
+    const input = document.createElement('textarea');
+    input.className = 'free-text';
+    input.rows = 3;
+    input.value = state.respuestas[fila.Question_ID] || '';
+    input.oninput = () => { state.respuestas[fila.Question_ID] = input.value; renderPanel(); };
+    div.appendChild(input);
+    return div;
+  }
+
+  function renderCampoPasivo(fila) {
+    const div = document.createElement('div');
+    div.className = 'block';
+    const box = document.createElement('div');
+    box.className = 'passive-field';
+    const label = document.createElement('div');
+    label.className = 'block-label';
+    label.textContent = fila['Script / Pregunta'] || fila.Question_ID;
+    box.appendChild(label);
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'free-text';
+    input.placeholder = 'Se llena solo si surge...';
+    input.value = state.respuestas[fila.Question_ID] || '';
+    input.oninput = () => {
+      state.respuestas[fila.Question_ID] = input.value;
+      state.variables[normalizeKey(fila.Question_ID)] = input.value;
+      renderPanel();
+    };
+    box.appendChild(input);
+    div.appendChild(box);
+    return div;
+  }
+
+  function renderEvaluacionAgente(fila) {
+    const div = document.createElement('div');
+    div.className = 'block';
+    const q = document.createElement('div');
+    q.className = 'question-text';
+    q.innerHTML = interpolar(fila['Script / Pregunta'] || '');
+    div.appendChild(q);
+
+    const wrap = document.createElement('div');
+    wrap.className = 'eval-agente';
+    [
+      { valor: 'VERDE', label: '🟢', cls: 'sel-green' },
+      { valor: 'NARANJA', label: '🟠', cls: 'sel-orange' },
+      { valor: 'ROJO', label: '🔴', cls: 'sel-red' }
+    ].forEach(o => {
+      const btn = document.createElement('button');
+      btn.className = 'eval-btn' + (state.respuestas[fila.Question_ID] === o.valor ? ' ' + o.cls : '');
+      btn.textContent = o.label;
+      btn.onclick = () => { state.respuestas[fila.Question_ID] = o.valor; renderContent(); };
+      wrap.appendChild(btn);
+    });
+    div.appendChild(wrap);
+    return div;
+  }
+
+  function renderAccion(fila) {
+    const div = document.createElement('div');
+    div.className = 'block';
+    const btn = document.createElement('button');
+    btn.className = 'action-btn';
+    btn.textContent = fila['Script / Pregunta'] || fila.Question_ID;
+    btn.onclick = () => ejecutarAccion(fila.Question_ID);
+    div.appendChild(btn);
+    return div;
+  }
+
+  // Las acciones se identifican por convención en el Question_ID
+  // (ej. ACCION_GUARDAR_LLAMADA, ACCION_NOTIFICAR_SUPERVISION).
+  function ejecutarAccion(questionId) {
+    const id = normalizeKey(questionId);
+    if (id.indexOf('GUARDAR') !== -1) { irACheckpoint(); return; }
+    if (id.indexOf('NOTIFIC') !== -1 || id.indexOf('SUPERVIS') !== -1) {
+      state.respuestas[questionId] = 'NOTIFICADO_' + new Date().toISOString();
+      alert('Se registró la notificación a Supervisión.');
+      renderPanel();
+      return;
+    }
+    state.respuestas[questionId] = 'EJECUTADO_' + new Date().toISOString();
+    renderPanel();
+  }
+
+  function renderPanelInfo(fila) {
+    const div = document.createElement('div');
+    div.className = 'block';
+    const box = document.createElement('div');
+    box.className = 'panel-info';
+    box.innerHTML = interpolar(fila['Script / Pregunta'] || '');
+    div.appendChild(box);
+    return div;
+  }
+
+  // ---- Panel derecho ----
+
+  function renderPanel() {
+    const panel = document.getElementById('right-panel');
+    panel.innerHTML = '';
+
+    const tituloEval = document.createElement('div');
+    tituloEval.className = 'rp-title';
+    tituloEval.textContent = 'Evaluación continua';
+    panel.appendChild(tituloEval);
+
+    const continuas = (state.data.preguntas || []).filter(p => p.Tipo === 'EVALUACION_CONTINUA');
+    if (!continuas.length) {
+      const vacio = document.createElement('div');
+      vacio.className = 'empty-state';
+      vacio.textContent = 'Sin indicadores continuos.';
+      panel.appendChild(vacio);
+    }
+    continuas.forEach(fila => {
+      if (state.continuas[fila.Question_ID] === undefined) state.continuas[fila.Question_ID] = 'VERDE';
+      const row = document.createElement('div');
+      row.className = 'rp-eval-row';
+      const label = document.createElement('span');
+      label.textContent = fila['Script / Pregunta'] || fila.Question_ID;
+      const dot = document.createElement('span');
+      dot.className = 'dot dot-' + colorClase(state.continuas[fila.Question_ID]);
+      dot.style.cursor = 'pointer';
+      dot.title = 'Click para cambiar estado';
+      dot.onclick = () => {
+        state.continuas[fila.Question_ID] = siguienteColor(state.continuas[fila.Question_ID]);
+        state.respuestas[fila.Question_ID] = state.continuas[fila.Question_ID];
+        renderPanel();
+      };
+      row.appendChild(label);
+      row.appendChild(dot);
+      panel.appendChild(row);
+    });
+
+    const tituloResumen = document.createElement('div');
+    tituloResumen.className = 'rp-title';
+    tituloResumen.style.marginTop = '18px';
+    tituloResumen.textContent = 'Resumen en vivo';
+    panel.appendChild(tituloResumen);
+
+    const respondidas = Object.keys(state.respuestas).filter(k => state.respuestas[k] !== '' && state.respuestas[k] !== undefined);
+    if (!respondidas.length) {
+      const vacio = document.createElement('div');
+      vacio.className = 'empty-state';
+      vacio.textContent = 'Todavía no hay respuestas.';
+      panel.appendChild(vacio);
+    } else {
+      respondidas.forEach(qid => {
+        const fila = (state.data.preguntas || []).find(p => p.Question_ID === qid);
+        const etiqueta = fila ? (fila['Script / Pregunta'] || qid) : qid;
+        const item = document.createElement('div');
+        item.className = 'checklist-item';
+        item.textContent = etiqueta + ': ' + state.respuestas[qid];
+        panel.appendChild(item);
+      });
+    }
+  }
+
+  function colorClase(valor) {
+    if (valor === 'ROJO') return 'red';
+    if (valor === 'NARANJA') return 'orange';
+    return 'green';
+  }
+
+  function siguienteColor(valor) {
+    if (valor === 'VERDE') return 'NARANJA';
+    if (valor === 'NARANJA') return 'ROJO';
+    return 'VERDE';
+  }
+
+  // ---- Checkpoint (pantalla fija: Calificación / Flags / Incidentes) ----
+
+  function renderCheckpoint() {
+    const content = document.getElementById('content');
+    content.innerHTML = '';
+    const cargando = document.createElement('div');
+    cargando.className = 'empty-state';
+    cargando.textContent = 'Evaluando reglas...';
+    content.appendChild(cargando);
+
+    state.checkpointOverride = null;
+    google.script.run.withSuccessHandler(mostrarCheckpoint).withFailureHandler(onError)
+      .evaluarReglas(state.programa, state.respuestas);
+  }
+
+  // Clasificacion tiene columnas que no conocemos de antemano en el cliente;
+  // por convención el primer campo de cada fila es el código de resultado,
+  // que es el mismo valor que Reglas_[Programa].Result guarda.
+  function codigoDe(row) { return Object.values(row)[0]; }
+
+  function buscarClasificacion(codigo) {
+    if (!codigo) return null;
+    return (state.data.clasificacion || []).find(row => codigoDe(row) === codigo) || null;
+  }
+
+  function colorDeClasificacion(row) {
+    if (!row) return '';
+    const texto = Object.values(row).join(' ');
+    if (texto.indexOf('🔴') !== -1) return 'red';
+    if (texto.indexOf('🟠') !== -1) return 'orange';
+    if (texto.indexOf('⚠️') !== -1) return 'orange';
+    if (texto.indexOf('🟢') !== -1) return 'green';
+    return '';
+  }
+
+  function mostrarCheckpoint(reglasDisparadas) {
+    state.reglasDisparadas = reglasDisparadas || [];
+    const reglaGanadora = state.reglasDisparadas[0] || null;
+    if (state.checkpointOverride === null) {
+      state.checkpointOverride = reglaGanadora ? reglaGanadora.Result : '';
+    }
+    renderCheckpointCard(reglaGanadora);
+  }
+
+  function renderCheckpointCard(reglaGanadora) {
+    const content = document.getElementById('content');
+    content.innerHTML = '';
+
+    const card = document.createElement('div');
+    card.className = 'checkpoint-card';
+
+    const clasifRow = buscarClasificacion(state.checkpointOverride);
+    const color = colorDeClasificacion(clasifRow);
+    const colorMap = { green: 'var(--green)', orange: 'var(--orange)', red: 'var(--red)' };
+    const badge = document.createElement('span');
+    badge.className = 'result-badge';
+    badge.style.background = colorMap[color] || '#9aa4b2';
+    badge.style.color = '#fff';
+    badge.textContent = state.checkpointOverride || 'Sin regla disparada';
+    card.appendChild(badge);
+
+    if (reglaGanadora) {
+      const razon = document.createElement('p');
+      razon.innerHTML = '<strong>Razón interna:</strong> ' + escapeHtml(reglaGanadora.Internal_Reason || '');
+      card.appendChild(razon);
+
+      if (reglaGanadora.ESA_Validation) {
+        const esa = document.createElement('p');
+        esa.innerHTML = '<strong>Validación ESA:</strong> ' + escapeHtml(reglaGanadora.ESA_Validation);
+        card.appendChild(esa);
+      }
+      if (reglaGanadora.Customer_Message) {
+        const msg = document.createElement('div');
+        msg.className = 'script-text';
+        msg.innerHTML = interpolar(reglaGanadora.Customer_Message);
+        card.appendChild(msg);
+      }
+      if (reglaGanadora.Next_Action) {
+        const next = document.createElement('p');
+        next.innerHTML = '<strong>Siguiente acción:</strong> ' + escapeHtml(reglaGanadora.Next_Action);
+        card.appendChild(next);
+      }
+    } else {
+      const sinRegla = document.createElement('p');
+      sinRegla.className = 'empty-state';
+      sinRegla.textContent = 'Ninguna regla se disparó con las respuestas actuales.';
+      card.appendChild(sinRegla);
+    }
+
+    const ajusteLabel = document.createElement('div');
+    ajusteLabel.className = 'block-label';
+    ajusteLabel.style.marginTop = '14px';
+    ajusteLabel.textContent = 'Confirmar o ajustar calificación';
+    card.appendChild(ajusteLabel);
+
+    const select = document.createElement('select');
+    select.className = 'free-text';
+    (state.data.clasificacion || []).forEach(row => {
+      const codigo = codigoDe(row);
+      const opt = document.createElement('option');
+      opt.value = codigo;
+      opt.textContent = codigo;
+      if (codigo === state.checkpointOverride) opt.selected = true;
+      select.appendChild(opt);
+    });
+    select.onchange = () => {
+      state.checkpointOverride = select.value;
+      renderCheckpointCard(reglaGanadora);
+    };
+    card.appendChild(select);
+
+    const incLabel = document.createElement('div');
+    incLabel.className = 'block-label';
+    incLabel.style.marginTop = '18px';
+    incLabel.textContent = 'Incidentes detectados';
+    card.appendChild(incLabel);
+
+    const incList = document.createElement('div');
+    incList.id = 'lista-incidentes';
+    card.appendChild(incList);
+    renderListaIncidentes();
+
+    const addWrap = document.createElement('div');
+    addWrap.className = 'options';
+    addWrap.style.marginTop = '8px';
+    const selInc = document.createElement('select');
+    selInc.className = 'free-text';
+    const vacio = document.createElement('option');
+    vacio.value = '';
+    vacio.textContent = 'Agregar incidente...';
+    selInc.appendChild(vacio);
+    (state.data.incidentesCatalogo || []).forEach(inc => {
+      const opt = document.createElement('option');
+      opt.value = inc.Incidente_ID;
+      opt.textContent = inc.Incidente_ID + ' — ' + (inc.Descripcion || '');
+      selInc.appendChild(opt);
+    });
+    selInc.onchange = () => {
+      if (selInc.value) { agregarIncidente(selInc.value); selInc.value = ''; }
+    };
+    addWrap.appendChild(selInc);
+    card.appendChild(addWrap);
+
+    content.appendChild(card);
+
+    const duracionLabel = document.createElement('div');
+    duracionLabel.className = 'block-label';
+    duracionLabel.textContent = 'Duración de la llamada (minutos)';
+    content.appendChild(duracionLabel);
+
+    const duracionInput = document.createElement('input');
+    duracionInput.type = 'number';
+    duracionInput.min = '0';
+    duracionInput.className = 'free-text';
+    duracionInput.value = calcularDuracionMinutos();
+    content.appendChild(duracionInput);
+
+    const guardarBtn = document.createElement('button');
+    guardarBtn.className = 'action-btn';
+    guardarBtn.style.marginTop = '18px';
+    guardarBtn.textContent = 'Guardar llamada';
+    guardarBtn.onclick = () => finalizarLlamada(duracionInput.value);
+    content.appendChild(guardarBtn);
+  }
+
+  function agregarIncidente(incidenteId) {
+    const def = (state.data.incidentesCatalogo || []).find(i => i.Incidente_ID === incidenteId);
+    state.incidentes.push({
+      Incidente_ID: incidenteId,
+      Color: def ? def.Color_Sugerido : '',
+      Resolucion: '',
+      Pendiente: def ? def.Requiere_Seguimiento : ''
+    });
+    renderListaIncidentes();
+  }
+
+  function quitarIncidente(index) {
+    state.incidentes.splice(index, 1);
+    renderListaIncidentes();
+  }
+
+  function renderListaIncidentes() {
+    const container = document.getElementById('lista-incidentes');
+    if (!container) return;
+    container.innerHTML = '';
+    if (!state.incidentes.length) {
+      const vacio = document.createElement('div');
+      vacio.className = 'empty-state';
+      vacio.textContent = 'Sin incidentes registrados en esta llamada.';
+      container.appendChild(vacio);
+      return;
+    }
+    state.incidentes.forEach((inc, idx) => {
+      const item = document.createElement('div');
+      item.className = 'checklist-item';
+      const texto = document.createElement('span');
+      texto.textContent = inc.Incidente_ID + (inc.Color ? ' (' + inc.Color + ')' : '');
+      const quitar = document.createElement('button');
+      quitar.className = 'btn-mini btn-danger';
+      quitar.textContent = 'Quitar';
+      quitar.onclick = () => quitarIncidente(idx);
+      item.appendChild(texto);
+      item.appendChild(quitar);
+      container.appendChild(item);
+    });
+  }
+
+  function calcularDuracionMinutos() {
+    if (!state.startTime) return 0;
+    return Math.round((Date.now() - state.startTime) / 60000);
+  }
+
+  function finalizarLlamada(duracionMinutos) {
+    const flags = (state.reglasDisparadas || [])
+      .filter(r => esVerdadero(r.Show_Alert))
+      .map(r => r.Rule_ID)
+      .join(', ');
+
+    const datos = {
+      programa: state.programa,
+      contrato: state.contrato,
+      cliente: state.cliente,
+      agente: state.agente,
+      duracion: duracionMinutos,
+      calificacionFinal: state.checkpointOverride || '',
+      flags: flags,
+      respuestas: state.respuestas,
+      incidentes: state.incidentes
+    };
+
+    google.script.run.withSuccessHandler(resp => {
+      if (resp === 'OK') {
+        alert('Llamada guardada correctamente.');
+        location.reload();
+      } else {
+        alert('Hubo un problema al guardar: ' + resp);
+      }
+    }).withFailureHandler(onError).guardarLlamada(datos);
+  }
+
+  // ---- Topbar: contrato / cliente ----
+
+  function onContratoChange(valor) {
+    state.contrato = valor;
+    state.variables['CONTRATO'] = valor;
+  }
+
+  function onVariableChange(key, value) {
+    const normKey = normalizeKey(key);
+    state.variables[normKey] = value;
+    if (normKey === 'CLIENT_NAME') state.cliente = value;
+    if (state.data && state.activeFase) {
+      if (state.activeFase !== '__CHECKPOINT__') renderContent();
+    }
+  }
+
+  function buscarHistorico() {
+    const contrato = document.getElementById('tb-contrato').value.trim();
+    if (!contrato) { alert('Escribe un número de contrato para buscar.'); return; }
+    google.script.run.withSuccessHandler(mostrarHistorico).withFailureHandler(onError).buscarContratoHistorico(contrato);
+  }
+
+  function mostrarHistorico(resultado) {
+    if (!resultado) { alert('No se encontró historial para ese contrato.'); return; }
+    if (typeof resultado === 'string') { alert(resultado); return; }
+    const r = resultado.registro;
+    let texto = 'Última llamada registrada:\n' +
+      'Fecha: ' + r.Fecha + '\nPrograma: ' + r.Programa + '\nAgente: ' + r.Agente +
+      '\nCalificación: ' + r.Calificacion_Final + '\nIncidentes: ' + r.Num_Incidentes;
+    if (resultado.incidentes && resultado.incidentes.length) {
+      texto += '\n\nIncidentes registrados:\n' +
+        resultado.incidentes.map(i => '- ' + i.Incidente_ID + ' (' + i.Color + ')').join('\n');
+    }
+    alert(texto);
+  }
+</script>
