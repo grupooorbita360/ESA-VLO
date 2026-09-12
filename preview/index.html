@@ -32,31 +32,39 @@
 
   <div id="lock-screen" class="lock-screen">
     <div class="lock-card">
+      <div class="lock-idioma">
+        <button class="btn-mini" id="btn-idioma-es-lock" onclick="cambiarIdioma('ES')">ES</button>
+        <button class="btn-mini" id="btn-idioma-en-lock" onclick="cambiarIdioma('EN')">EN</button>
+      </div>
       <h2>Verification Copilot (visor local)</h2>
-      <label>Agente</label>
+      <label data-i18n="labelAgente">Agente</label>
       <select id="sel-agente"><option value="">Cargando...</option></select>
-      <label>Programa</label>
+      <label data-i18n="labelPrograma">Programa</label>
       <select id="sel-programa"><option value="">Cargando...</option></select>
-      <label>Contrato</label>
-      <input id="lock-contrato" type="text" placeholder="Numero de contrato" value="DEMO-0001">
-      <label>Cliente</label>
-      <input id="lock-cliente" type="text" placeholder="Nombre del cliente" value="Cliente de Prueba">
-      <button id="btn-iniciar" onclick="iniciar()">Iniciar</button>
+      <label data-i18n="labelContrato">Contrato</label>
+      <input id="lock-contrato" type="text" data-i18n-placeholder="placeholderContrato" value="DEMO-0001">
+      <label data-i18n="labelCliente">Cliente</label>
+      <input id="lock-cliente" type="text" data-i18n-placeholder="placeholderCliente" value="Cliente de Prueba">
+      <button id="btn-iniciar" onclick="iniciar()" data-i18n="btnIniciar">Iniciar</button>
     </div>
   </div>
 
   <div id="app" class="app" style="display:none;">
     <header class="topbar">
-      <div class="topbar-field"><span class="tb-label">Agente</span><span id="tb-agente">--</span></div>
-      <div class="topbar-field"><span class="tb-label">Programa</span><span id="tb-programa">--</span></div>
-      <div class="topbar-field"><span class="tb-label">Contrato</span>
-        <input id="tb-contrato" type="text" placeholder="Escribe o busca..." oninput="onContratoChange(this.value)">
-        <button class="btn-mini" onclick="buscarHistorico()">Buscar</button>
+      <div class="topbar-field"><span class="tb-label" data-i18n="labelAgente">Agente</span><span id="tb-agente">--</span></div>
+      <div class="topbar-field"><span class="tb-label" data-i18n="labelPrograma">Programa</span><span id="tb-programa">--</span></div>
+      <div class="topbar-field"><span class="tb-label" data-i18n="labelContrato">Contrato</span>
+        <input id="tb-contrato" type="text" data-i18n-placeholder="placeholderContratoTopbar" oninput="onContratoChange(this.value)">
+        <button class="btn-mini" onclick="buscarHistorico()" data-i18n="btnBuscar">Buscar</button>
       </div>
-      <div class="topbar-field"><span class="tb-label">Cliente</span>
+      <div class="topbar-field"><span class="tb-label" data-i18n="labelCliente">Cliente</span>
         <input id="tb-cliente" type="text" oninput="onVariableChange('CLIENT_NAME', this.value)">
       </div>
-      <button class="btn-mini btn-danger" onclick="reiniciar()">Reiniciar</button>
+      <div class="topbar-field">
+        <button class="btn-mini" id="btn-idioma-es" onclick="cambiarIdioma('ES')">ES</button>
+        <button class="btn-mini" id="btn-idioma-en" onclick="cambiarIdioma('EN')">EN</button>
+      </div>
+      <button class="btn-mini btn-danger" onclick="reiniciar()" data-i18n="btnReiniciar">Reiniciar</button>
     </header>
 
     <div class="body-grid">

@@ -42,8 +42,12 @@ const MOCK_DB = {
     // Preguntas_[Programa]: guion sintetico, 4 fases + Checkpoint + Cierre.
     // Tipo ya viene en el conjunto cerrado de 8 (post-migracion real).
     preguntas: [
-      { Fase: '1. Apertura', Orden: 1, Question_ID: '', Tipo: 'SCRIPT', 'Script / Pregunta': 'Hola, soy [Tu nombre]. ¿Hablo con {{Client Name}}?', Opciones: '', Mostrar_Si: '', Obligatorio: '' },
-      { Fase: '1. Apertura', Orden: 2, Question_ID: 'Q_TIEMPO_OK', Tipo: 'PREGUNTA', 'Script / Pregunta': '¿Es buen momento para hablar?', Opciones: 'Si, No', Mostrar_Si: '', Obligatorio: 'SI' },
+      // Estas dos filas traen columnas "(EN)" a proposito, para probar que
+      // el toggle de idioma solo traduce el guion cuando el Sheet lo trae --
+      // el resto de las filas de abajo NO tienen columna EN y deben seguir
+      // viendose en español aunque el toggle este en EN (ese es el fallback).
+      { Fase: '1. Apertura', Orden: 1, Question_ID: '', Tipo: 'SCRIPT', 'Script / Pregunta': 'Hola, soy [Tu nombre]. ¿Hablo con {{Client Name}}?', 'Script / Pregunta (EN)': 'Hello, this is [Your Name]. Am I speaking with {{Client Name}}?', Opciones: '', Mostrar_Si: '', Obligatorio: '' },
+      { Fase: '1. Apertura', Orden: 2, Question_ID: 'Q_TIEMPO_OK', Tipo: 'PREGUNTA', 'Script / Pregunta': '¿Es buen momento para hablar?', 'Script / Pregunta (EN)': 'Is this a good time to talk?', Opciones: 'Si, No', 'Opciones (EN)': 'Yes, No', Mostrar_Si: '', Obligatorio: 'SI' },
       { Fase: '1. Apertura', Orden: 3, Question_ID: '', Tipo: 'SCRIPT', 'Script / Pregunta': 'Perfecto, {{Client Name}}, gracias por tu tiempo.', Opciones: '', Mostrar_Si: 'Q_TIEMPO_OK: Si', Obligatorio: '' },
       { Fase: '1. Apertura', Orden: 4, Question_ID: 'EVAL_IDIOMA', Tipo: 'EVALUACION_CONTINUA', 'Script / Pregunta': 'Campo persistente en panel, activo desde Apertura. Verde=fluido por evidencia de la llamada (default). Naranja=duda real (acento marcado, pide repetir seguido, etc).', Opciones: 'Verde (default), Naranja', Mostrar_Si: '', Obligatorio: '' },
 

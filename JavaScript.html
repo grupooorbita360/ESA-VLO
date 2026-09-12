@@ -30,10 +30,127 @@
     startTime: null,
     reglasDisparadas: [],
     checkpointOverride: null,
-    filaCalificacion: null
+    filaCalificacion: null,
+    idioma: 'ES'    // 'ES' | 'EN' -- ver TEXTOS / t() / textoFila() mas abajo
   };
 
+  // ============================================================
+  // Idioma -- dos cosas separadas:
+  //  1. TEXTOS/t(): la interfaz que yo escribi (botones, etiquetas, alertas).
+  //     Se traduce por completo, vive solo en este archivo.
+  //  2. textoFila(): el guion real (Script / Pregunta, Opciones,
+  //     Customer_Message) NUNCA se traduce por codigo -- eso violaria la
+  //     regla de que ningun texto de guion vive en el codigo. Si el Sheet
+  //     agrega una columna paralela "<Columna> (EN)" (ej. "Script / Pregunta
+  //     (EN)"), textoFila la usa cuando hay contenido y el idioma activo es
+  //     EN; si esa columna no existe o esta vacia para una fila, se sigue
+  //     mostrando la columna original sin importar el idioma elegido.
+  // ============================================================
+  const TEXTOS = {
+    ES: {
+      labelAgente: 'Agente', labelPrograma: 'Programa', labelContrato: 'Contrato', labelCliente: 'Cliente',
+      btnIniciar: 'Iniciar', btnReiniciar: 'Reiniciar', btnBuscar: 'Buscar', btnQuitar: 'Quitar', btnGuardar: 'Guardar llamada',
+      placeholderContrato: 'Numero de contrato', placeholderCliente: 'Nombre del cliente',
+      placeholderContratoTopbar: 'Escribe o busca...', placeholderCampoPasivo: 'Se llena solo si surge...', placeholderOtro: 'Especifica...',
+      cargando: 'Cargando...', sinProgramas: 'Sin programas activos',
+      alertaSeleccionaAgentePrograma: 'Selecciona agente y programa.',
+      alertaFaltaContratoCliente: 'Escribe el contrato y el nombre del cliente antes de iniciar -- el VLO no arranca sin esto.',
+      alertaCargandoPrograma: 'Los datos del programa todavía están cargando, intenta de nuevo en un momento.',
+      confirmReiniciar: '¿Reiniciar la llamada actual? Se perderá lo que no se haya guardado.',
+      sinFilas: 'No hay elementos para mostrar en esta fase todavía.',
+      capturaBannerTitulo: 'Captura fuera de orden:', capturaBannerSufijo: '. Contesta lo que necesites y vuelve al flujo normal.',
+      volverAlFlujo: '← Volver al flujo', chipOtro: 'Otro (especificar)', ejecutar: 'Ejecutar',
+      evaluandoReglas: 'Evaluando reglas...', evaluando: 'Evaluando...', flagsDetectadosTitulo: 'Flags detectados',
+      oportunidadesTitulo: 'Oportunidades identificadas en esta llamada',
+      oportunidadSeguro: 'No viaja asegurado -- ofrecer SafeKit/Propack.',
+      oportunidadTransporte: 'Transporte sin resolver -- ofrecer upgrade.',
+      oportunidadActividades: 'Sin actividades definidas -- ofrecer recomendaciones.',
+      sinOportunidades: 'Sin oportunidades detectadas -- se puede pasar directo a Cierre.',
+      agregarIncidente: 'Agregar incidente...', sinIncidentes: 'Sin incidentes registrados en esta llamada.',
+      sinReglaBadge: 'Sin regla disparada', razonInterna: 'Razón interna:', validacionEsa: 'Validación ESA:',
+      siguienteAccion: 'Siguiente acción:', sinReglaTexto: 'Ninguna regla se disparó con las respuestas actuales.',
+      labelAjusteCalificacion: 'Confirmar o ajustar calificación', sinFlagsDetectados: 'Sin flags detectados.',
+      tituloProgreso: 'Progreso de la llamada', sufijoProgreso: '% completado',
+      tituloEvalContinua: 'Evaluación continua', sinIndicadores: 'Sin indicadores continuos.', clickParaCambiar: 'click para cambiar',
+      tituloResumen: 'Resumen en vivo', sinRespuestas: 'Todavía no hay respuestas.',
+      labelDuracion: 'Duración de la llamada (minutos)',
+      llamadaGuardada: 'Llamada guardada correctamente.', problemaGuardar: 'Hubo un problema al guardar: ',
+      alertaContratoVacio: 'Escribe un número de contrato para buscar.', sinHistorico: 'No se encontró historial para ese contrato.',
+      historicoTitulo: 'Última llamada registrada:', historicoFecha: 'Fecha:', historicoPrograma: 'Programa:',
+      historicoAgente: 'Agente:', historicoCalificacion: 'Calificación:', historicoIncidentesNum: 'Incidentes:',
+      historicoIncidentesTitulo: 'Incidentes registrados:'
+    },
+    EN: {
+      labelAgente: 'Agent', labelPrograma: 'Program', labelContrato: 'Contract', labelCliente: 'Client',
+      btnIniciar: 'Start', btnReiniciar: 'Restart', btnBuscar: 'Search', btnQuitar: 'Remove', btnGuardar: 'Save call',
+      placeholderContrato: 'Contract number', placeholderCliente: 'Client name',
+      placeholderContratoTopbar: 'Type or search...', placeholderCampoPasivo: 'Only fill in if it comes up...', placeholderOtro: 'Specify...',
+      cargando: 'Loading...', sinProgramas: 'No active programs',
+      alertaSeleccionaAgentePrograma: 'Select agent and program.',
+      alertaFaltaContratoCliente: 'Enter the contract number and client name before starting -- the VLO will not start without this.',
+      alertaCargandoPrograma: 'Program data is still loading, try again in a moment.',
+      confirmReiniciar: 'Restart the current call? Anything not saved will be lost.',
+      sinFilas: 'Nothing to show for this phase yet.',
+      capturaBannerTitulo: 'Out-of-order capture:', capturaBannerSufijo: '. Answer what you need and return to the normal flow.',
+      volverAlFlujo: '← Back to flow', chipOtro: 'Other (specify)', ejecutar: 'Run',
+      evaluandoReglas: 'Evaluating rules...', evaluando: 'Evaluating...', flagsDetectadosTitulo: 'Flags detected',
+      oportunidadesTitulo: 'Opportunities identified in this call',
+      oportunidadSeguro: 'Not traveling with protection -- offer SafeKit/Propack.',
+      oportunidadTransporte: 'Transportation not resolved -- offer upgrade.',
+      oportunidadActividades: 'No activities defined -- offer recommendations.',
+      sinOportunidades: 'No opportunities detected -- can move straight to Closing.',
+      agregarIncidente: 'Add incident...', sinIncidentes: 'No incidents logged for this call.',
+      sinReglaBadge: 'No rule triggered', razonInterna: 'Internal reason:', validacionEsa: 'ESA validation:',
+      siguienteAccion: 'Next action:', sinReglaTexto: 'No rule was triggered with the current answers.',
+      labelAjusteCalificacion: 'Confirm or adjust rating', sinFlagsDetectados: 'No flags detected.',
+      tituloProgreso: 'Call progress', sufijoProgreso: '% complete',
+      tituloEvalContinua: 'Ongoing evaluation', sinIndicadores: 'No ongoing indicators.', clickParaCambiar: 'click to change',
+      tituloResumen: 'Live summary', sinRespuestas: 'No answers yet.',
+      labelDuracion: 'Call duration (minutes)',
+      llamadaGuardada: 'Call saved successfully.', problemaGuardar: 'There was a problem saving: ',
+      alertaContratoVacio: 'Enter a contract number to search.', sinHistorico: 'No history found for that contract.',
+      historicoTitulo: 'Last call on record:', historicoFecha: 'Date:', historicoPrograma: 'Program:',
+      historicoAgente: 'Agent:', historicoCalificacion: 'Rating:', historicoIncidentesNum: 'Incidents:',
+      historicoIncidentesTitulo: 'Logged incidents:'
+    }
+  };
+
+  function t(clave) {
+    const dict = TEXTOS[state.idioma] || TEXTOS.ES;
+    return dict[clave] !== undefined ? dict[clave] : (TEXTOS.ES[clave] || clave);
+  }
+
+  // Ver comentario grande arriba: NUNCA traduce nada por su cuenta, solo lee
+  // una columna paralela "<Columna> (EN)" si el Sheet la trae con contenido.
+  function textoFila(fila, columna) {
+    if (state.idioma === 'EN') {
+      const enValor = fila[columna + ' (EN)'];
+      if (enValor !== undefined && enValor.toString().trim() !== '') return enValor;
+    }
+    return fila[columna] || '';
+  }
+
+  function cambiarIdioma(idioma) {
+    state.idioma = idioma;
+    aplicarIdiomaEstatico();
+    if (state.data && state.fases.length) renderContent();
+  }
+
+  // Traduce el HTML estatico (marcado con data-i18n / data-i18n-placeholder
+  // en Index.html) y resalta el boton de idioma activo.
+  function aplicarIdiomaEstatico() {
+    document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.getAttribute('data-i18n')); });
+    document.querySelectorAll('[data-i18n-placeholder]').forEach(el => { el.placeholder = t(el.getAttribute('data-i18n-placeholder')); });
+    ['btn-idioma-es-lock', 'btn-idioma-en-lock', 'btn-idioma-es', 'btn-idioma-en'].forEach(id => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const esEste = (id.indexOf('-es') !== -1) === (state.idioma === 'ES');
+      el.classList.toggle('idioma-activo', esEste);
+    });
+  }
+
   document.addEventListener('DOMContentLoaded', () => {
+    aplicarIdiomaEstatico();
     google.script.run.withSuccessHandler(onProgramasCargados).withFailureHandler(onError).getProgramasActivos();
   });
 
@@ -49,7 +166,7 @@
     const sel = document.getElementById('sel-programa');
     sel.innerHTML = '';
     if (!state.programasActivos.length) {
-      sel.innerHTML = '<option value="">Sin programas activos</option>';
+      sel.innerHTML = '<option value="">' + escapeHtml(t('sinProgramas')) + '</option>';
       return;
     }
     state.programasActivos.forEach(p => {
@@ -64,7 +181,7 @@
 
   function cargarDatosPrograma(programa) {
     const selAgente = document.getElementById('sel-agente');
-    selAgente.innerHTML = '<option value="">Cargando...</option>';
+    selAgente.innerHTML = '<option value="">' + escapeHtml(t('cargando')) + '</option>';
     google.script.run.withSuccessHandler(onDataInicial).withFailureHandler(onError).getDataInicial(programa);
   }
 
@@ -86,10 +203,10 @@
     const programa = document.getElementById('sel-programa').value;
     const contrato = document.getElementById('lock-contrato').value.trim();
     const cliente = document.getElementById('lock-cliente').value.trim();
-    if (!agente || !programa) { alert('Selecciona agente y programa.'); return; }
-    if (!contrato || !cliente) { alert('Escribe el contrato y el nombre del cliente antes de iniciar -- el VLO no arranca sin esto.'); return; }
+    if (!agente || !programa) { alert(t('alertaSeleccionaAgentePrograma')); return; }
+    if (!contrato || !cliente) { alert(t('alertaFaltaContratoCliente')); return; }
     if (!state.data || !state.data.config || state.data.config['Product/Program'] !== programa) {
-      alert('Los datos del programa todavía están cargando, intenta de nuevo en un momento.');
+      alert(t('alertaCargandoPrograma'));
       return;
     }
     state.agente = agente;
@@ -112,7 +229,7 @@
   // recargar ese iframe directo (location.reload) puede dejarlo en blanco.
   // Navegar la ventana de arriba (top) fuerza una carga limpia desde cero.
   function reiniciar() {
-    if (!confirm('¿Reiniciar la llamada actual? Se perderá lo que no se haya guardado.')) return;
+    if (!confirm(t('confirmReiniciar'))) return;
     top.location.href = top.location.href;
   }
 
@@ -267,7 +384,7 @@
         const contestada = state.respuestas[fila.Question_ID] !== undefined;
         const sub = document.createElement('button');
         sub.className = 'nav-subitem' + (contestada ? ' contestada' : '');
-        sub.textContent = (contestada ? '✓ ' : '') + truncar(fila['Script / Pregunta'], 40);
+        sub.textContent = (contestada ? '✓ ' : '') + truncar(textoFila(fila, 'Script / Pregunta'), 40);
         sub.onclick = () => irAPreguntaFueraDeOrden(fase, fila.Question_ID);
         sidebar.appendChild(sub);
       });
@@ -399,14 +516,14 @@
 
     const banner = document.createElement('div');
     banner.className = 'captura-banner';
-    banner.innerHTML = '<strong>Captura fuera de orden:</strong> ' + escapeHtml(state.modoCaptura) +
-      '. Contesta lo que necesites y vuelve al flujo normal.';
+    banner.innerHTML = '<strong>' + escapeHtml(t('capturaBannerTitulo')) + '</strong> ' + escapeHtml(state.modoCaptura) +
+      escapeHtml(t('capturaBannerSufijo'));
     content.appendChild(banner);
 
     const volverBtn = document.createElement('button');
     volverBtn.className = 'btn-mini';
     volverBtn.style.marginBottom = '18px';
-    volverBtn.textContent = '← Volver al flujo';
+    volverBtn.textContent = t('volverAlFlujo');
     volverBtn.onclick = volverAlFlujo;
     content.appendChild(volverBtn);
 
@@ -428,7 +545,7 @@
     if (!filas.length) {
       const vacio = document.createElement('div');
       vacio.className = 'empty-state';
-      vacio.textContent = 'No hay elementos para mostrar en esta fase todavía.';
+      vacio.textContent = t('sinFilas');
       content.appendChild(vacio);
     }
 
@@ -456,7 +573,7 @@
     div.className = 'block';
     const btn = document.createElement('button');
     btn.className = 'action-btn';
-    btn.textContent = fila['Script / Pregunta'] || fila.Question_ID || 'Ejecutar';
+    btn.textContent = textoFila(fila, 'Script / Pregunta') || fila.Question_ID || t('ejecutar');
     btn.onclick = () => {
       if (fila.Question_ID) state.respuestas[fila.Question_ID] = 'EJECUTADO_' + new Date().toISOString();
       renderPanel();
@@ -470,7 +587,7 @@
     div.className = 'block';
     const box = document.createElement('div');
     box.className = 'script-text';
-    box.innerHTML = interpolar(fila['Script / Pregunta'] || '');
+    box.innerHTML = interpolar(textoFila(fila, 'Script / Pregunta'));
     div.appendChild(box);
     return div;
   }
@@ -480,31 +597,38 @@
   // agregan "N/A" y "Otro (especificar)" para cuando ninguna opcion del
   // Sheet aplica al caso real.
   function renderPreguntaOCaptura(fila) {
-    const opciones = separarOpciones(fila.Opciones);
-    if (!opciones.length) return renderLibre(fila);
+    // El VALOR guardado en respuestas (y comparado por evaluarReglas contra
+    // Answer_Value) siempre es el de la columna base (Opciones), nunca el
+    // traducido -- si no, cambiar de idioma a media llamada rompería el
+    // motor de reglas. Opciones (EN) solo cambia la ETIQUETA que ve el
+    // agente; debe listar sus valores en el mismo orden que Opciones.
+    const opcionesBase = separarOpciones(fila.Opciones);
+    if (!opcionesBase.length) return renderLibre(fila);
+    const opcionesMostradas = separarOpciones(textoFila(fila, 'Opciones'));
 
     const div = document.createElement('div');
     div.className = 'block';
     div.id = 'q-' + normalizeKey(fila.Question_ID);
     const q = document.createElement('div');
     q.className = 'question-text';
-    q.innerHTML = interpolar(fila['Script / Pregunta'] || '');
+    q.innerHTML = interpolar(textoFila(fila, 'Script / Pregunta'));
     div.appendChild(q);
 
     const valorActual = state.respuestas[fila.Question_ID];
-    const todasOpciones = opciones.concat(['N/A']);
-    const esValorOtro = valorActual !== undefined && !todasOpciones.includes(valorActual);
+    const valoresBase = opcionesBase.concat(['N/A']);
+    const esValorOtro = valorActual !== undefined && !valoresBase.includes(valorActual);
     const mostrarOtro = !!state.mostrarOtroPara[fila.Question_ID] || esValorOtro;
 
     const opts = document.createElement('div');
     opts.className = 'options';
-    todasOpciones.forEach(op => {
+    valoresBase.forEach((valorBase, idx) => {
+      const etiqueta = valorBase === 'N/A' ? 'N/A' : (opcionesMostradas[idx] || valorBase);
       const chip = document.createElement('button');
-      chip.className = 'option-chip' + (valorActual === op ? ' selected' : '');
-      chip.textContent = op;
+      chip.className = 'option-chip' + (valorActual === valorBase ? ' selected' : '');
+      chip.textContent = etiqueta;
       chip.onclick = () => {
         delete state.mostrarOtroPara[fila.Question_ID];
-        state.respuestas[fila.Question_ID] = op;
+        state.respuestas[fila.Question_ID] = valorBase;
         renderContent();
       };
       opts.appendChild(chip);
@@ -512,7 +636,7 @@
 
     const chipOtro = document.createElement('button');
     chipOtro.className = 'option-chip' + (mostrarOtro ? ' selected' : '');
-    chipOtro.textContent = 'Otro (especificar)';
+    chipOtro.textContent = t('chipOtro');
     chipOtro.onclick = () => {
       state.mostrarOtroPara[fila.Question_ID] = true;
       if (!esValorOtro) delete state.respuestas[fila.Question_ID];
@@ -526,7 +650,7 @@
       inputOtro.type = 'text';
       inputOtro.className = 'free-text';
       inputOtro.style.marginTop = '8px';
-      inputOtro.placeholder = 'Especifica...';
+      inputOtro.placeholder = t('placeholderOtro');
       inputOtro.value = esValorOtro ? valorActual : '';
       inputOtro.oninput = () => {
         if (inputOtro.value.trim()) state.respuestas[fila.Question_ID] = inputOtro.value;
@@ -544,7 +668,7 @@
     div.className = 'block';
     const q = document.createElement('div');
     q.className = 'question-text';
-    q.innerHTML = interpolar(fila['Script / Pregunta'] || '');
+    q.innerHTML = interpolar(textoFila(fila, 'Script / Pregunta'));
     div.appendChild(q);
 
     const input = document.createElement('textarea');
@@ -563,13 +687,13 @@
     box.className = 'passive-field';
     const label = document.createElement('div');
     label.className = 'block-label';
-    label.textContent = fila['Script / Pregunta'] || fila.Question_ID;
+    label.textContent = textoFila(fila, 'Script / Pregunta') || fila.Question_ID;
     box.appendChild(label);
 
     const input = document.createElement('input');
     input.type = 'text';
     input.className = 'free-text';
-    input.placeholder = 'Se llena solo si surge...';
+    input.placeholder = t('placeholderCampoPasivo');
     input.value = state.respuestas[fila.Question_ID] || '';
     input.oninput = () => {
       state.respuestas[fila.Question_ID] = input.value;
@@ -587,18 +711,25 @@
     div.id = 'q-' + normalizeKey(fila.Question_ID);
     const q = document.createElement('div');
     q.className = 'question-text';
-    q.innerHTML = interpolar(fila['Script / Pregunta'] || '');
+    q.innerHTML = interpolar(textoFila(fila, 'Script / Pregunta'));
     div.appendChild(q);
+
+    // Mismo criterio que renderPreguntaOCaptura: se guarda siempre el valor
+    // base, solo la etiqueta visible cambia de idioma.
+    const opcionesBase = separarOpciones(fila.Opciones);
+    const opcionesMostradas = separarOpciones(textoFila(fila, 'Opciones'));
+    const valorActual = state.respuestas[fila.Question_ID];
 
     const wrap = document.createElement('div');
     wrap.className = 'eval-agente';
-    separarOpciones(fila.Opciones).forEach(op => {
-      const color = colorDeTexto(op);
+    opcionesBase.forEach((valorBase, idx) => {
+      const etiqueta = opcionesMostradas[idx] || valorBase;
+      const color = colorDeTexto(etiqueta);
       const claseSel = color === 'red' ? 'sel-red' : color === 'orange' ? 'sel-orange' : color === 'green' ? 'sel-green' : '';
       const btn = document.createElement('button');
-      btn.className = 'eval-btn' + (state.respuestas[fila.Question_ID] === op && claseSel ? ' ' + claseSel : '');
-      btn.textContent = op;
-      btn.onclick = () => { state.respuestas[fila.Question_ID] = op; renderContent(); };
+      btn.className = 'eval-btn' + (valorActual === valorBase && claseSel ? ' ' + claseSel : '');
+      btn.textContent = etiqueta;
+      btn.onclick = () => { state.respuestas[fila.Question_ID] = valorBase; renderContent(); };
       wrap.appendChild(btn);
     });
     div.appendChild(wrap);
@@ -632,7 +763,7 @@
     div.className = 'block';
     const box = document.createElement('div');
     box.className = 'panel-info';
-    box.innerHTML = interpolar(fila['Script / Pregunta'] || '');
+    box.innerHTML = interpolar(textoFila(fila, 'Script / Pregunta'));
     div.appendChild(box);
     return div;
   }
@@ -642,30 +773,31 @@
   }
 
   // Cuenta como oportunidad: Q_VIAJA_ASEGURADO != Si, Q_TRANSPORTE_RESUELTO != Si,
-  // Q_INTERES_ACTIVIDADES = "Todavia no he pensado en eso".
+  // Q_INTERES_ACTIVIDADES = "Todavia no he pensado en eso". La condicion
+  // compara siempre contra el valor base guardado (ver renderPreguntaOCaptura).
   function renderPanelOportunidades(fila) {
     const div = document.createElement('div');
     div.className = 'block';
     const label = document.createElement('div');
     label.className = 'block-label';
-    label.textContent = 'Oportunidades identificadas en esta llamada';
+    label.textContent = t('oportunidadesTitulo');
     div.appendChild(label);
 
     const oportunidades = [];
     if (noEsSi(state.respuestas.Q_VIAJA_ASEGURADO)) {
-      oportunidades.push('No viaja asegurado -- ofrecer SafeKit/Propack.');
+      oportunidades.push(t('oportunidadSeguro'));
     }
     if (noEsSi(state.respuestas.Q_TRANSPORTE_RESUELTO)) {
-      oportunidades.push('Transporte sin resolver -- ofrecer upgrade.');
+      oportunidades.push(t('oportunidadTransporte'));
     }
     if ((state.respuestas.Q_INTERES_ACTIVIDADES || '').toString().trim() === 'Todavia no he pensado en eso') {
-      oportunidades.push('Sin actividades definidas -- ofrecer recomendaciones.');
+      oportunidades.push(t('oportunidadActividades'));
     }
 
     const box = document.createElement('div');
     if (!oportunidades.length) {
       box.className = 'empty-state';
-      box.textContent = 'Sin oportunidades detectadas -- se puede pasar directo a Cierre.';
+      box.textContent = t('sinOportunidades');
     } else {
       box.className = 'panel-info';
       oportunidades.forEach(op => {
@@ -686,10 +818,10 @@
     div.className = 'block';
     const label = document.createElement('div');
     label.className = 'question-text';
-    label.innerHTML = interpolar(fila['Script / Pregunta'] || '');
+    label.innerHTML = interpolar(textoFila(fila, 'Script / Pregunta'));
     div.appendChild(label);
 
-    const opcionesResolucion = separarOpciones(fila.Opciones);
+    const opcionesResolucion = separarOpciones(textoFila(fila, 'Opciones'));
     const lista = document.createElement('div');
     lista.id = 'lista-incidentes';
     div.appendChild(lista);
@@ -702,7 +834,7 @@
     selInc.className = 'free-text';
     const vacio = document.createElement('option');
     vacio.value = '';
-    vacio.textContent = 'Agregar incidente...';
+    vacio.textContent = t('agregarIncidente');
     selInc.appendChild(vacio);
     (state.data.incidentesCatalogo || []).forEach(inc => {
       const opt = document.createElement('option');
@@ -741,7 +873,7 @@
     if (!state.incidentes.length) {
       const vacio = document.createElement('div');
       vacio.className = 'empty-state';
-      vacio.textContent = 'Sin incidentes registrados en esta llamada.';
+      vacio.textContent = t('sinIncidentes');
       container.appendChild(vacio);
       return;
     }
@@ -762,7 +894,7 @@
 
       const quitar = document.createElement('button');
       quitar.className = 'btn-mini btn-danger';
-      quitar.textContent = 'Quitar';
+      quitar.textContent = t('btnQuitar');
       quitar.onclick = () => quitarIncidente(idx, opcionesResolucion);
       item.appendChild(quitar);
       container.appendChild(item);
@@ -776,7 +908,7 @@
     const div = document.createElement('div');
     div.className = 'checkpoint-card';
     div.id = 'calificacion-box';
-    div.innerHTML = '<div class="empty-state">Evaluando reglas...</div>';
+    div.innerHTML = '<div class="empty-state">' + escapeHtml(t('evaluandoReglas')) + '</div>';
     return div;
   }
 
@@ -785,12 +917,12 @@
     div.className = 'block';
     const label = document.createElement('div');
     label.className = 'block-label';
-    label.textContent = fila['Script / Pregunta'] || 'Flags detectados';
+    label.textContent = textoFila(fila, 'Script / Pregunta') || t('flagsDetectadosTitulo');
     div.appendChild(label);
     const box = document.createElement('div');
     box.id = 'flags-content';
     box.className = 'empty-state';
-    box.textContent = 'Evaluando...';
+    box.textContent = t('evaluando');
     div.appendChild(box);
     return div;
   }
@@ -819,50 +951,54 @@
     badge.className = 'result-badge';
     badge.style.background = colorMap[colorDeTexto(state.checkpointOverride)] || '#9aa4b2';
     badge.style.color = '#fff';
-    badge.textContent = state.checkpointOverride || 'Sin regla disparada';
+    badge.textContent = state.checkpointOverride || t('sinReglaBadge');
     box.appendChild(badge);
 
     if (reglaGanadora) {
       const razon = document.createElement('p');
-      razon.innerHTML = '<strong>Razón interna:</strong> ' + escapeHtml(reglaGanadora.Internal_Reason || '');
+      razon.innerHTML = '<strong>' + escapeHtml(t('razonInterna')) + '</strong> ' + escapeHtml(reglaGanadora.Internal_Reason || '');
       box.appendChild(razon);
 
       if (reglaGanadora.ESA_Validation && esVerdadero(reglaGanadora.ESA_Validation)) {
         const esa = document.createElement('p');
-        esa.innerHTML = '<strong>Validación ESA:</strong> ' + escapeHtml(reglaGanadora.ESA_Validation);
+        esa.innerHTML = '<strong>' + escapeHtml(t('validacionEsa')) + '</strong> ' + escapeHtml(reglaGanadora.ESA_Validation);
         box.appendChild(esa);
       }
       if (reglaGanadora.Customer_Message) {
         const msg = document.createElement('div');
         msg.className = 'script-text';
-        msg.innerHTML = interpolar(reglaGanadora.Customer_Message);
+        msg.innerHTML = interpolar(textoFila(reglaGanadora, 'Customer_Message'));
         box.appendChild(msg);
       }
       if (reglaGanadora.Next_Action) {
         const next = document.createElement('p');
-        next.innerHTML = '<strong>Siguiente acción:</strong> ' + escapeHtml(reglaGanadora.Next_Action);
+        next.innerHTML = '<strong>' + escapeHtml(t('siguienteAccion')) + '</strong> ' + escapeHtml(reglaGanadora.Next_Action);
         box.appendChild(next);
       }
     } else {
       const sinRegla = document.createElement('p');
       sinRegla.className = 'empty-state';
-      sinRegla.textContent = 'Ninguna regla se disparó con las respuestas actuales.';
+      sinRegla.textContent = t('sinReglaTexto');
       box.appendChild(sinRegla);
     }
 
     const ajusteLabel = document.createElement('div');
     ajusteLabel.className = 'block-label';
     ajusteLabel.style.marginTop = '14px';
-    ajusteLabel.textContent = 'Confirmar o ajustar calificación';
+    ajusteLabel.textContent = t('labelAjusteCalificacion');
     box.appendChild(ajusteLabel);
 
+    // El VALOR guardado (state.checkpointOverride, lo que se manda a
+    // guardarLlamada) siempre es el codigo base -- la lista traducida solo
+    // cambia la etiqueta que ve el agente en el desplegable.
     const select = document.createElement('select');
     select.className = 'free-text';
-    const opciones = separarOpciones(state.filaCalificacion ? state.filaCalificacion.Opciones : '');
-    opciones.forEach(codigo => {
+    const codigosBase = separarOpciones(state.filaCalificacion ? state.filaCalificacion.Opciones : '');
+    const codigosMostrados = separarOpciones(state.filaCalificacion ? textoFila(state.filaCalificacion, 'Opciones') : '');
+    codigosBase.forEach((codigo, idx) => {
       const opt = document.createElement('option');
       opt.value = codigo;
-      opt.textContent = codigo;
+      opt.textContent = codigosMostrados[idx] || codigo;
       if (codigo === state.checkpointOverride) opt.selected = true;
       select.appendChild(opt);
     });
@@ -883,7 +1019,7 @@
     const conAlerta = (state.reglasDisparadas || []).filter(r => esVerdadero(r.Show_Alert));
     if (!conAlerta.length) {
       box.className = 'empty-state';
-      box.textContent = 'Sin flags detectados.';
+      box.textContent = t('sinFlagsDetectados');
       return;
     }
     box.className = '';
@@ -903,7 +1039,7 @@
 
     const tituloProgreso = document.createElement('div');
     tituloProgreso.className = 'rp-title';
-    tituloProgreso.textContent = 'Progreso de la llamada';
+    tituloProgreso.textContent = t('tituloProgreso');
     panel.appendChild(tituloProgreso);
 
     const progreso = calcularProgreso();
@@ -917,39 +1053,45 @@
 
     const progresoTexto = document.createElement('div');
     progresoTexto.className = 'progreso-texto';
-    progresoTexto.textContent = progreso + '% completado';
+    progresoTexto.textContent = progreso + t('sufijoProgreso');
     panel.appendChild(progresoTexto);
 
     const tituloEval = document.createElement('div');
     tituloEval.className = 'rp-title';
-    tituloEval.textContent = 'Evaluación continua';
+    tituloEval.textContent = t('tituloEvalContinua');
     panel.appendChild(tituloEval);
 
     const continuas = (state.data.preguntas || []).filter(p => tipoCategoria(p.Tipo) === 'EVALUACION_CONTINUA');
     if (!continuas.length) {
       const vacio = document.createElement('div');
       vacio.className = 'empty-state';
-      vacio.textContent = 'Sin indicadores continuos.';
+      vacio.textContent = t('sinIndicadores');
       panel.appendChild(vacio);
     }
     continuas.forEach(fila => {
-      const opciones = separarOpciones(fila.Opciones).map(o => o.replace(/\s*\(default\)\s*/i, '').trim());
-      if (!opciones.length) opciones.push('Verde');
-      if (state.continuas[fila.Question_ID] === undefined) state.continuas[fila.Question_ID] = opciones[0];
+      // El VALOR guardado (state.continuas / state.respuestas, comparado por
+      // Mostrar_Si) siempre es el de la columna base -- Opciones (EN) solo
+      // cambia la etiqueta del tooltip.
+      const opcionesBase = separarOpciones(fila.Opciones).map(o => o.replace(/\s*\(default\)\s*/i, '').trim());
+      if (!opcionesBase.length) opcionesBase.push('Verde');
+      const opcionesMostradas = separarOpciones(textoFila(fila, 'Opciones')).map(o => o.replace(/\s*\(default\)\s*/i, '').trim());
+      if (state.continuas[fila.Question_ID] === undefined) state.continuas[fila.Question_ID] = opcionesBase[0];
 
       const row = document.createElement('div');
       row.className = 'rp-eval-row';
       const label = document.createElement('span');
       label.textContent = etiquetaCorta(fila.Question_ID);
-      label.title = fila['Script / Pregunta'] || ''; // el texto largo de instrucciones queda en el tooltip
-      const valorActual = state.continuas[fila.Question_ID];
+      label.title = textoFila(fila, 'Script / Pregunta'); // el texto largo de instrucciones queda en el tooltip
+      const valorBase = state.continuas[fila.Question_ID];
+      const idxActual = opcionesBase.indexOf(valorBase);
+      const etiquetaValor = (idxActual !== -1 && opcionesMostradas[idxActual]) || valorBase;
       const dot = document.createElement('span');
-      dot.className = 'dot dot-' + (colorDeTexto(valorActual) || colorPorNombre(valorActual));
+      dot.className = 'dot dot-' + (colorDeTexto(valorBase) || colorPorNombre(valorBase));
       dot.style.cursor = 'pointer';
-      dot.title = valorActual + ' -- click para cambiar';
+      dot.title = etiquetaValor + ' -- ' + t('clickParaCambiar');
       dot.onclick = () => {
-        const idx = opciones.indexOf(state.continuas[fila.Question_ID]);
-        state.continuas[fila.Question_ID] = opciones[(idx + 1) % opciones.length];
+        const idx = opcionesBase.indexOf(state.continuas[fila.Question_ID]);
+        state.continuas[fila.Question_ID] = opcionesBase[(idx + 1) % opcionesBase.length];
         state.respuestas[fila.Question_ID] = state.continuas[fila.Question_ID];
         renderPanel();
       };
@@ -961,19 +1103,19 @@
     const tituloResumen = document.createElement('div');
     tituloResumen.className = 'rp-title';
     tituloResumen.style.marginTop = '18px';
-    tituloResumen.textContent = 'Resumen en vivo';
+    tituloResumen.textContent = t('tituloResumen');
     panel.appendChild(tituloResumen);
 
     const respondidas = Object.keys(state.respuestas).filter(k => state.respuestas[k] !== '' && state.respuestas[k] !== undefined);
     if (!respondidas.length) {
       const vacio = document.createElement('div');
       vacio.className = 'empty-state';
-      vacio.textContent = 'Todavía no hay respuestas.';
+      vacio.textContent = t('sinRespuestas');
       panel.appendChild(vacio);
     } else {
       respondidas.forEach(qid => {
         const fila = (state.data.preguntas || []).find(p => p.Question_ID === qid);
-        const etiqueta = fila ? (fila['Script / Pregunta'] || qid) : qid;
+        const etiqueta = fila ? (textoFila(fila, 'Script / Pregunta') || qid) : qid;
         const item = document.createElement('div');
         item.className = 'checklist-item';
         item.textContent = etiqueta + ': ' + state.respuestas[qid];
@@ -988,7 +1130,7 @@
     const duracionLabel = document.createElement('div');
     duracionLabel.className = 'block-label';
     duracionLabel.style.marginTop = '18px';
-    duracionLabel.textContent = 'Duración de la llamada (minutos)';
+    duracionLabel.textContent = t('labelDuracion');
     content.appendChild(duracionLabel);
 
     const duracionInput = document.createElement('input');
@@ -1001,7 +1143,7 @@
     const guardarBtn = document.createElement('button');
     guardarBtn.className = 'action-btn';
     guardarBtn.style.marginTop = '12px';
-    guardarBtn.textContent = 'Guardar llamada';
+    guardarBtn.textContent = t('btnGuardar');
     guardarBtn.onclick = () => finalizarLlamada(duracionInput.value);
     content.appendChild(guardarBtn);
   }
@@ -1031,10 +1173,10 @@
 
     google.script.run.withSuccessHandler(resp => {
       if (resp === 'OK') {
-        alert('Llamada guardada correctamente.');
+        alert(t('llamadaGuardada'));
         top.location.href = top.location.href;
       } else {
-        alert('Hubo un problema al guardar: ' + resp);
+        alert(t('problemaGuardar') + resp);
       }
     }).withFailureHandler(onError).guardarLlamada(datos);
   }
@@ -1055,19 +1197,19 @@
 
   function buscarHistorico() {
     const contrato = document.getElementById('tb-contrato').value.trim();
-    if (!contrato) { alert('Escribe un número de contrato para buscar.'); return; }
+    if (!contrato) { alert(t('alertaContratoVacio')); return; }
     google.script.run.withSuccessHandler(mostrarHistorico).withFailureHandler(onError).buscarContratoHistorico(contrato);
   }
 
   function mostrarHistorico(resultado) {
-    if (!resultado) { alert('No se encontró historial para ese contrato.'); return; }
+    if (!resultado) { alert(t('sinHistorico')); return; }
     if (typeof resultado === 'string') { alert(resultado); return; }
     const r = resultado.registro;
-    let texto = 'Última llamada registrada:\n' +
-      'Fecha: ' + r.Fecha + '\nPrograma: ' + r.Programa + '\nAgente: ' + r.Agente +
-      '\nCalificación: ' + r.Calificacion_Final + '\nIncidentes: ' + r.Num_Incidentes;
+    let texto = t('historicoTitulo') + '\n' +
+      t('historicoFecha') + ' ' + r.Fecha + '\n' + t('historicoPrograma') + ' ' + r.Programa + '\n' + t('historicoAgente') + ' ' + r.Agente +
+      '\n' + t('historicoCalificacion') + ' ' + r.Calificacion_Final + '\n' + t('historicoIncidentesNum') + ' ' + r.Num_Incidentes;
     if (resultado.incidentes && resultado.incidentes.length) {
-      texto += '\n\nIncidentes registrados:\n' +
+      texto += '\n\n' + t('historicoIncidentesTitulo') + '\n' +
         resultado.incidentes.map(i => '- ' + i.Incidente_ID + ' (' + i.Color + ')').join('\n');
     }
     alert(texto);
