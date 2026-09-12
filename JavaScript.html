@@ -25,7 +25,7 @@
     continuas: {},         // Question_ID (EVALUACION_CONTINUA) -> estado actual
     incidentes: [],        // [{Incidente_ID, Color, Resolucion, Pendiente}]
     fases: [],
-    activeFase: '',
+    modoCaptura: null,    // null = flujo continuo; si no, Fase que se esta capturando fuera de orden
     startTime: null,
     reglasDisparadas: [],
     checkpointOverride: null,
@@ -142,6 +142,19 @@
     return 'green';
   }
 
+  // El texto de "Script / Pregunta" en EVALUACION_CONTINUA es la instruccion
+  // completa de cuando cambiar el semaforo (para el tooltip), no una etiqueta
+  // para mostrar. La etiqueta corta sale del Question_ID (ej. EVAL_IDIOMA -> Idioma).
+  function etiquetaCorta(questionId) {
+    if (!questionId) return '';
+    return questionId.toString()
+      .replace(/^EVAL_/, '')
+      .split('_')
+      .filter(Boolean)
+      .map(palabra => palabra.charAt(0) + palabra.slice(1).toLowerCase())
+      .join(' ');
+  }
+
   function obtenerVariable(nombre) {
     const key = normalizeKey(nombre);
     if (state.variables[key] !== undefined && state.variables[key] !== '') return state.variables[key];
@@ -187,6 +200,15 @@
   }
 
   // ---- Sidebar / Fases ----
+  //
+  // El guion NO se navega por pestañas: las preguntas van apareciendo solas,
+  // una tras otra, en una sola columna continua (renderFlujoContinuo). La
+  // fila que requiere una respuesta para poder avanzar (PREGUNTA /
+  // EVALUACION_AGENTE sin contestar) detiene el avance ahi -- lo de abajo
+  // simplemente no aparece todavia. El sidebar es solo un atajo: si la
+  // llamada se sale de contexto, el agente puede saltar a cualquier fase
+  // para capturar algo fuera de orden, y despues volver al flujo normal
+  // justo donde se habia quedado.
 
   function buildSidebar() {
     const fases = [];
@@ -194,8 +216,7 @@
       if (p.Fase && !fases.includes(p.Fase)) fases.push(p.Fase);
     });
     state.fases = fases;
-    state.activeFase = fases.find(faseHabilitada) || fases[0] || '';
-    renderSidebarNav();
+    state.modoCaptura = null;
     renderContent();
   }
 
@@ -210,37 +231,141 @@
   function renderSidebarNav() {
     const sidebar = document.getElementById('sidebar');
     sidebar.innerHTML = '';
+    const destacada = state.modoCaptura || faseActual();
     state.fases.filter(faseHabilitada).forEach(fase => {
       const btn = document.createElement('button');
-      btn.className = 'nav-item' + (fase === state.activeFase ? ' active' : '');
+      btn.className = 'nav-item' + (fase === destacada ? ' active' : '');
       btn.textContent = fase;
-      btn.onclick = () => { state.activeFase = fase; renderSidebarNav(); renderContent(); };
+      btn.onclick = () => irAFaseFueraDeOrden(fase);
       sidebar.appendChild(btn);
     });
   }
 
-  // ---- Contenido de la fase activa ----
+  function irAFaseFueraDeOrden(fase) {
+    state.modoCaptura = fase;
+    renderContent();
+  }
+
+  function volverAlFlujo() {
+    state.modoCaptura = null;
+    renderContent();
+  }
+
+  // ---- Contenido: flujo continuo o captura fuera de orden ----
 
   function renderContent() {
+    if (state.modoCaptura) renderCapturaFueraDeOrden();
+    else renderFlujoContinuo();
+  }
+
+  function todasLasFilasVisibles() {
+    return (state.data.preguntas || [])
+      .filter(p => p.Fase && faseHabilitada(p.Fase) && tipoCategoria(p.Tipo) !== 'EVALUACION_CONTINUA')
+      .sort((a, b) => {
+        const fa = state.fases.indexOf(a.Fase), fb = state.fases.indexOf(b.Fase);
+        if (fa !== fb) return fa - fb;
+        return (Number(a.Orden) || 0) - (Number(b.Orden) || 0);
+      })
+      .filter(fila => cumpleMostrarSi(fila.Mostrar_Si));
+  }
+
+  // Solo PREGUNTA y EVALUACION_AGENTE detienen el avance -- son las que
+  // capturan la eleccion de la que dependen los Mostrar_Si posteriores.
+  function filaBloquea(fila) {
+    const cat = tipoCategoria(fila.Tipo);
+    if (cat === 'PREGUNTA' || cat === 'EVALUACION_AGENTE') {
+      return state.respuestas[fila.Question_ID] === undefined;
+    }
+    return false;
+  }
+
+  // La fase "actual" es la de la primera pregunta pendiente -- o la ultima
+  // fase si ya no queda ninguna (la llamada llego al final del guion).
+  function faseActual() {
+    const filas = todasLasFilasVisibles();
+    for (let i = 0; i < filas.length; i++) {
+      if (filaBloquea(filas[i])) return filas[i].Fase;
+    }
+    return state.fases[state.fases.length - 1];
+  }
+
+  function crearEncabezadoFase(fase) {
+    const h = document.createElement('div');
+    h.className = 'fase-header';
+    h.textContent = fase;
+    return h;
+  }
+
+  function renderFlujoContinuo() {
     const content = document.getElementById('content');
     content.innerHTML = '';
-    const filas = (state.data.preguntas || [])
-      .filter(p => p.Fase === state.activeFase && tipoCategoria(p.Tipo) !== 'EVALUACION_CONTINUA')
-      .sort((a, b) => (Number(a.Orden) || 0) - (Number(b.Orden) || 0));
+    const filas = todasLasFilasVisibles();
 
-    let visibles = 0;
+    let faseAnterior = null;
+    let necesitaEvaluacion = false;
+    let llegoAlFinal = true;
+
+    for (let i = 0; i < filas.length; i++) {
+      const fila = filas[i];
+      if (fila.Fase !== faseAnterior) {
+        content.appendChild(crearEncabezadoFase(fila.Fase));
+        faseAnterior = fila.Fase;
+      }
+
+      const el = renderFila(fila);
+      if (el) content.appendChild(el);
+
+      if (tipoCategoria(fila.Tipo) === 'PANEL_INFO') {
+        const sub = subtipoPanelInfo(fila);
+        if (sub === 'CALIFICACION' || sub === 'FLAGS') necesitaEvaluacion = true;
+      }
+
+      if (filaBloquea(fila)) { llegoAlFinal = false; break; }
+    }
+
+    if (necesitaEvaluacion) evaluarYActualizarCheckpoint();
+
+    // Solo se ofrece "Guardar llamada" cuando el flujo llego de verdad hasta
+    // el final del guion (nada quedo bloqueando el avance en el camino).
+    if (llegoAlFinal) renderCierreFinal(content);
+
+    renderPanel();
+    renderSidebarNav();
+  }
+
+  function renderCapturaFueraDeOrden() {
+    const content = document.getElementById('content');
+    content.innerHTML = '';
+
+    const banner = document.createElement('div');
+    banner.className = 'captura-banner';
+    banner.innerHTML = '<strong>Captura fuera de orden:</strong> ' + escapeHtml(state.modoCaptura) +
+      '. Contesta lo que necesites y vuelve al flujo normal.';
+    content.appendChild(banner);
+
+    const volverBtn = document.createElement('button');
+    volverBtn.className = 'btn-mini';
+    volverBtn.style.marginBottom = '18px';
+    volverBtn.textContent = '← Volver al flujo';
+    volverBtn.onclick = volverAlFlujo;
+    content.appendChild(volverBtn);
+
+    const filas = (state.data.preguntas || [])
+      .filter(p => p.Fase === state.modoCaptura && tipoCategoria(p.Tipo) !== 'EVALUACION_CONTINUA')
+      .sort((a, b) => (Number(a.Orden) || 0) - (Number(b.Orden) || 0))
+      .filter(fila => cumpleMostrarSi(fila.Mostrar_Si));
+
     let necesitaEvaluacion = false;
     filas.forEach(fila => {
-      if (!cumpleMostrarSi(fila.Mostrar_Si)) return;
       const el = renderFila(fila);
-      if (el) { content.appendChild(el); visibles++; }
+      if (el) content.appendChild(el);
       if (tipoCategoria(fila.Tipo) === 'PANEL_INFO') {
         const sub = subtipoPanelInfo(fila);
         if (sub === 'CALIFICACION' || sub === 'FLAGS') necesitaEvaluacion = true;
       }
     });
 
-    if (!visibles) {
+    if (!filas.length) {
       const vacio = document.createElement('div');
       vacio.className = 'empty-state';
       vacio.textContent = 'No hay elementos para mostrar en esta fase todavía.';
@@ -249,11 +374,8 @@
 
     if (necesitaEvaluacion) evaluarYActualizarCheckpoint();
 
-    // No hay fila de tipo ACCION para "guardar" en el guion real -- el cierre
-    // de la llamada se ofrece siempre al llegar a la ultima fase (Cierre).
-    if (state.activeFase === state.fases[state.fases.length - 1]) renderCierreFinal(content);
-
     renderPanel();
+    renderSidebarNav();
   }
 
   function renderFila(fila) {
@@ -700,7 +822,8 @@
       const row = document.createElement('div');
       row.className = 'rp-eval-row';
       const label = document.createElement('span');
-      label.textContent = fila['Script / Pregunta'] || fila.Question_ID;
+      label.textContent = etiquetaCorta(fila.Question_ID);
+      label.title = fila['Script / Pregunta'] || ''; // el texto largo de instrucciones queda en el tooltip
       const valorActual = state.continuas[fila.Question_ID];
       const dot = document.createElement('span');
       dot.className = 'dot dot-' + (colorDeTexto(valorActual) || colorPorNombre(valorActual));
@@ -809,7 +932,7 @@
     const normKey = normalizeKey(key);
     state.variables[normKey] = value;
     if (normKey === 'CLIENT_NAME') state.cliente = value;
-    if (state.data && state.activeFase) renderContent();
+    if (state.data && state.fases.length) renderContent();
   }
 
   function buscarHistorico() {
