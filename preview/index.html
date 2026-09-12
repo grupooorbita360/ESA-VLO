@@ -37,6 +37,10 @@
       <select id="sel-agente"><option value="">Cargando...</option></select>
       <label>Programa</label>
       <select id="sel-programa"><option value="">Cargando...</option></select>
+      <label>Contrato</label>
+      <input id="lock-contrato" type="text" placeholder="Numero de contrato" value="DEMO-0001">
+      <label>Cliente</label>
+      <input id="lock-cliente" type="text" placeholder="Nombre del cliente" value="Cliente de Prueba">
       <button id="btn-iniciar" onclick="iniciar()">Iniciar</button>
     </div>
   </div>
@@ -52,7 +56,7 @@
       <div class="topbar-field"><span class="tb-label">Cliente</span>
         <input id="tb-cliente" type="text" oninput="onVariableChange('CLIENT_NAME', this.value)">
       </div>
-      <button class="btn-mini btn-danger" onclick="location.reload()">Reiniciar</button>
+      <button class="btn-mini btn-danger" onclick="reiniciar()">Reiniciar</button>
     </header>
 
     <div class="body-grid">

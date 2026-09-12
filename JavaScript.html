@@ -21,6 +21,7 @@
     cliente: '',
     data: null,          // resultado de getDataInicial(programa)
     respuestas: {},       // Question_ID -> valor contestado
+    mostrarOtroPara: {},   // Question_ID -> true mientras se escribe la respuesta de "Otro (especificar)"
     variables: {},        // clave normalizada -> valor (Campos_Variables + topbar)
     continuas: {},         // Question_ID (EVALUACION_CONTINUA) -> estado actual
     incidentes: [],        // [{Incidente_ID, Color, Resolucion, Pendiente}]
@@ -83,19 +84,36 @@
   function iniciar() {
     const agente = document.getElementById('sel-agente').value;
     const programa = document.getElementById('sel-programa').value;
+    const contrato = document.getElementById('lock-contrato').value.trim();
+    const cliente = document.getElementById('lock-cliente').value.trim();
     if (!agente || !programa) { alert('Selecciona agente y programa.'); return; }
+    if (!contrato || !cliente) { alert('Escribe el contrato y el nombre del cliente antes de iniciar -- el VLO no arranca sin esto.'); return; }
     if (!state.data || !state.data.config || state.data.config['Product/Program'] !== programa) {
       alert('Los datos del programa todavía están cargando, intenta de nuevo en un momento.');
       return;
     }
     state.agente = agente;
     state.programa = programa;
+    state.contrato = contrato;
+    state.cliente = cliente;
+    state.variables['CONTRATO'] = contrato;
+    state.variables['CLIENT_NAME'] = cliente;
     state.startTime = Date.now();
     document.getElementById('tb-agente').textContent = agente;
     document.getElementById('tb-programa').textContent = programa;
+    document.getElementById('tb-contrato').value = contrato;
+    document.getElementById('tb-cliente').value = cliente;
     document.getElementById('lock-screen').style.display = 'none';
     document.getElementById('app').style.display = 'block';
     buildSidebar();
+  }
+
+  // Los Web Apps de Apps Script sirven el contenido dentro de un iframe --
+  // recargar ese iframe directo (location.reload) puede dejarlo en blanco.
+  // Navegar la ventana de arriba (top) fuerza una carga limpia desde cero.
+  function reiniciar() {
+    if (!confirm('¿Reiniciar la llamada actual? Se perderá lo que no se haya guardado.')) return;
+    top.location.href = top.location.href;
   }
 
   // ---- Utilidades ----
@@ -238,12 +256,41 @@
       btn.textContent = fase;
       btn.onclick = () => irAFaseFueraDeOrden(fase);
       sidebar.appendChild(btn);
+
+      // Preguntas de esa fase desglosadas -- tachadas si ya se contestaron,
+      // clic salta directo a esa pregunta (fuera de orden si hace falta).
+      const preguntasFase = (state.data.preguntas || [])
+        .filter(p => p.Fase === fase && (tipoCategoria(p.Tipo) === 'PREGUNTA' || tipoCategoria(p.Tipo) === 'EVALUACION_AGENTE'))
+        .sort((a, b) => (Number(a.Orden) || 0) - (Number(b.Orden) || 0));
+
+      preguntasFase.forEach(fila => {
+        const contestada = state.respuestas[fila.Question_ID] !== undefined;
+        const sub = document.createElement('button');
+        sub.className = 'nav-subitem' + (contestada ? ' contestada' : '');
+        sub.textContent = (contestada ? '✓ ' : '') + truncar(fila['Script / Pregunta'], 40);
+        sub.onclick = () => irAPreguntaFueraDeOrden(fase, fila.Question_ID);
+        sidebar.appendChild(sub);
+      });
     });
+  }
+
+  function truncar(texto, max) {
+    const t = (texto || '').toString().trim();
+    return t.length > max ? t.slice(0, max - 1) + '…' : t;
   }
 
   function irAFaseFueraDeOrden(fase) {
     state.modoCaptura = fase;
     renderContent();
+  }
+
+  function irAPreguntaFueraDeOrden(fase, questionId) {
+    state.modoCaptura = fase;
+    renderContent();
+    requestAnimationFrame(() => {
+      const el = document.getElementById('q-' + normalizeKey(questionId));
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
   }
 
   function volverAlFlujo() {
@@ -429,28 +476,66 @@
   }
 
   // Cubre VERIFICACION / EXPLORATORIO / DISCOVERY / PREGUNTA / SONDEO.
-  // Sin Opciones, es una captura abierta (misma UI que LIBRE).
+  // Sin Opciones, es una captura abierta (misma UI que LIBRE). Siempre se
+  // agregan "N/A" y "Otro (especificar)" para cuando ninguna opcion del
+  // Sheet aplica al caso real.
   function renderPreguntaOCaptura(fila) {
     const opciones = separarOpciones(fila.Opciones);
     if (!opciones.length) return renderLibre(fila);
 
     const div = document.createElement('div');
     div.className = 'block';
+    div.id = 'q-' + normalizeKey(fila.Question_ID);
     const q = document.createElement('div');
     q.className = 'question-text';
     q.innerHTML = interpolar(fila['Script / Pregunta'] || '');
     div.appendChild(q);
 
+    const valorActual = state.respuestas[fila.Question_ID];
+    const todasOpciones = opciones.concat(['N/A']);
+    const esValorOtro = valorActual !== undefined && !todasOpciones.includes(valorActual);
+    const mostrarOtro = !!state.mostrarOtroPara[fila.Question_ID] || esValorOtro;
+
     const opts = document.createElement('div');
     opts.className = 'options';
-    opciones.forEach(op => {
+    todasOpciones.forEach(op => {
       const chip = document.createElement('button');
-      chip.className = 'option-chip' + (state.respuestas[fila.Question_ID] === op ? ' selected' : '');
+      chip.className = 'option-chip' + (valorActual === op ? ' selected' : '');
       chip.textContent = op;
-      chip.onclick = () => { state.respuestas[fila.Question_ID] = op; renderContent(); };
+      chip.onclick = () => {
+        delete state.mostrarOtroPara[fila.Question_ID];
+        state.respuestas[fila.Question_ID] = op;
+        renderContent();
+      };
       opts.appendChild(chip);
     });
+
+    const chipOtro = document.createElement('button');
+    chipOtro.className = 'option-chip' + (mostrarOtro ? ' selected' : '');
+    chipOtro.textContent = 'Otro (especificar)';
+    chipOtro.onclick = () => {
+      state.mostrarOtroPara[fila.Question_ID] = true;
+      if (!esValorOtro) delete state.respuestas[fila.Question_ID];
+      renderContent();
+    };
+    opts.appendChild(chipOtro);
     div.appendChild(opts);
+
+    if (mostrarOtro) {
+      const inputOtro = document.createElement('input');
+      inputOtro.type = 'text';
+      inputOtro.className = 'free-text';
+      inputOtro.style.marginTop = '8px';
+      inputOtro.placeholder = 'Especifica...';
+      inputOtro.value = esValorOtro ? valorActual : '';
+      inputOtro.oninput = () => {
+        if (inputOtro.value.trim()) state.respuestas[fila.Question_ID] = inputOtro.value;
+        else delete state.respuestas[fila.Question_ID];
+        renderPanel();
+      };
+      div.appendChild(inputOtro);
+    }
+
     return div;
   }
 
@@ -499,6 +584,7 @@
   function renderEvaluacionAgente(fila) {
     const div = document.createElement('div');
     div.className = 'block';
+    div.id = 'q-' + normalizeKey(fila.Question_ID);
     const q = document.createElement('div');
     q.className = 'question-text';
     q.innerHTML = interpolar(fila['Script / Pregunta'] || '');
@@ -946,7 +1032,7 @@
     google.script.run.withSuccessHandler(resp => {
       if (resp === 'OK') {
         alert('Llamada guardada correctamente.');
-        location.reload();
+        top.location.href = top.location.href;
       } else {
         alert('Hubo un problema al guardar: ' + resp);
       }

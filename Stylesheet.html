@@ -17,7 +17,7 @@
   .lock-card { background:#fff; border:1px solid var(--border); border-radius:12px; padding:28px; width:320px; box-shadow:0 4px 20px rgba(0,0,0,.06); }
   .lock-card h2 { margin:0 0 18px; font-size:18px; }
   .lock-card label { display:block; font-size:11px; text-transform:uppercase; color:var(--muted); margin:12px 0 4px; }
-  .lock-card select, .lock-card button { width:100%; padding:9px; border-radius:8px; border:1px solid var(--border); font-family:inherit; font-size:13px; }
+  .lock-card select, .lock-card input, .lock-card button { width:100%; padding:9px; border-radius:8px; border:1px solid var(--border); font-family:inherit; font-size:13px; box-sizing:border-box; }
   .lock-card button { margin-top:18px; background:var(--accent); color:#fff; border:none; font-weight:600; cursor:pointer; }
 
   /* Topbar */
@@ -36,6 +36,9 @@
   .nav-item { display:block; width:100%; text-align:left; padding:9px 12px; border-radius:8px; border:none; background:transparent; font-size:12.5px; cursor:pointer; font-family:inherit; margin-bottom:2px; }
   .nav-item:hover { background:#eef2f7; }
   .nav-item.active { background:var(--accent); color:#fff; font-weight:600; }
+  .nav-subitem { display:block; width:100%; text-align:left; padding:5px 10px 5px 22px; border-radius:6px; border:none; background:transparent; font-size:11px; color:var(--muted); cursor:pointer; font-family:inherit; margin-bottom:1px; line-height:1.35; }
+  .nav-subitem:hover { background:#eef2f7; color:var(--ink); }
+  .nav-subitem.contestada { text-decoration:line-through; color:#9aa4b2; }
 
   .content { flex:1; padding:26px 34px; max-width:680px; }
   .right-panel { width:290px; flex-shrink:0; border-left:1px solid var(--border); background:var(--bg-soft); padding:18px 16px; position:sticky; top:46px; height:calc(100vh - 46px); overflow-y:auto; }
