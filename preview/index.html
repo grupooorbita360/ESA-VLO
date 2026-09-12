@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>ESA-VLO -- Visor local (sin Apps Script)</title>
+  <!--
+    Visor de prueba local. NO forma parte del proyecto de Apps Script
+    (Apps Script ignora cualquier carpeta llamada "preview"). Sirve para
+    probar cambios de JavaScript.html/Stylesheet.html en un navegador
+    normal, sin copiar nada al editor y sin tocar el Sheet real.
+
+    Como usarlo:
+      1. Desde la raiz del repo: python3 -m http.server 8000
+         (tiene que ser server; abrir el archivo directo con file:// no
+         funciona porque el navegador bloquea el fetch() de abajo)
+      2. Abrir http://localhost:8000/preview/ en el navegador.
+      3. Editar JavaScript.html o Stylesheet.html y recargar la pagina --
+         este visor los lee en vivo, no hay build ni copia de por medio.
+
+    Los datos que ves aqui (agentes, preguntas, reglas) son de PRUEBA,
+    inventados en mock-data.js -- no es el guion real de ningun programa.
+    Esto prueba la mecanica de la app (flujo, panel fijo, progreso,
+    Checkpoint, Mostrar_Si); la validacion final siempre es contra el
+    Sheet real desde Apps Script.
+  -->
+  <style id="estilos-reales"><!-- se llena en vivo desde Stylesheet.html --></style>
+  <style>
+    .aviso-preview { position:fixed; bottom:0; left:0; right:0; background:#1a202c; color:#fbbf24; font:12px monospace; padding:6px 14px; z-index:9999; text-align:center; }
+  </style>
+</head>
+<body>
+
+  <div id="lock-screen" class="lock-screen">
+    <div class="lock-card">
+      <h2>Verification Copilot (visor local)</h2>
+      <label>Agente</label>
+      <select id="sel-agente"><option value="">Cargando...</option></select>
+      <label>Programa</label>
+      <select id="sel-programa"><option value="">Cargando...</option></select>
+      <button id="btn-iniciar" onclick="iniciar()">Iniciar</button>
+    </div>
+  </div>
+
+  <div id="app" class="app" style="display:none;">
+    <header class="topbar">
+      <div class="topbar-field"><span class="tb-label">Agente</span><span id="tb-agente">--</span></div>
+      <div class="topbar-field"><span class="tb-label">Programa</span><span id="tb-programa">--</span></div>
+      <div class="topbar-field"><span class="tb-label">Contrato</span>
+        <input id="tb-contrato" type="text" placeholder="Escribe o busca..." oninput="onContratoChange(this.value)">
+        <button class="btn-mini" onclick="buscarHistorico()">Buscar</button>
+      </div>
+      <div class="topbar-field"><span class="tb-label">Cliente</span>
+        <input id="tb-cliente" type="text" oninput="onVariableChange('CLIENT_NAME', this.value)">
+      </div>
+      <button class="btn-mini btn-danger" onclick="location.reload()">Reiniciar</button>
+    </header>
+
+    <div class="body-grid">
+      <aside class="sidebar" id="sidebar"></aside>
+      <main class="content" id="content"></main>
+      <aside class="right-panel" id="right-panel"></aside>
+    </div>
+  </div>
+
+  <div class="aviso-preview">VISOR LOCAL -- datos de prueba, no es el Sheet real</div>
+
+  <script src="mock-data.js"></script>
+  <script>
+    // Carga Stylesheet.html y JavaScript.html TAL COMO ESTAN en la raiz del
+    // repo (una sola fuente de verdad -- nada se duplica ni se copia).
+    async function extraerContenido(url, etiqueta) {
+      const resp = await fetch(url);
+      if (!resp.ok) throw new Error('No se pudo leer ' + url + ' (¿estas sirviendo por http:// y no abriendo el archivo directo?)');
+      const texto = await resp.text();
+      const regex = new RegExp('<' + etiqueta + '[^>]*>([\\s\\S]*)</' + etiqueta + '>');
+      const m = texto.match(regex);
+      if (!m) throw new Error(etiqueta + ' no encontrado en ' + url);
+      return m[1];
+    }
+
+    (async () => {
+      try {
+        const css = await extraerContenido('../Stylesheet.html', 'style');
+        document.getElementById('estilos-reales').textContent = css;
+
+        const js = await extraerContenido('../JavaScript.html', 'script');
+        const scriptReal = document.createElement('script');
+        scriptReal.textContent = js;
+        document.body.appendChild(scriptReal); // se ejecuta al insertarse, dispara DOMContentLoaded ya paso -> lo disparamos manual abajo
+        document.dispatchEvent(new Event('DOMContentLoaded'));
+      } catch (e) {
+        document.body.innerHTML = '<pre style="padding:24px;color:#dc2626;">' + e.message + '</pre>';
+      }
+    })();
+  </script>
+</body>
+</html>

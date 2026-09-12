@@ -289,6 +289,19 @@
     return state.fases[state.fases.length - 1];
   }
 
+  // % sobre las preguntas que en este momento son visibles y cuentan como
+  // avance real (PREGUNTA / EVALUACION_AGENTE) -- el total baja o sube solo
+  // segun las ramas que Mostrar_Si vaya abriendo o cerrando con las respuestas.
+  function calcularProgreso() {
+    const filas = todasLasFilasVisibles().filter(f => {
+      const cat = tipoCategoria(f.Tipo);
+      return cat === 'PREGUNTA' || cat === 'EVALUACION_AGENTE';
+    });
+    if (!filas.length) return 0;
+    const contestadas = filas.filter(f => state.respuestas[f.Question_ID] !== undefined).length;
+    return Math.round((contestadas / filas.length) * 100);
+  }
+
   function crearEncabezadoFase(fase) {
     const h = document.createElement('div');
     h.className = 'fase-header';
@@ -801,6 +814,25 @@
   function renderPanel() {
     const panel = document.getElementById('right-panel');
     panel.innerHTML = '';
+
+    const tituloProgreso = document.createElement('div');
+    tituloProgreso.className = 'rp-title';
+    tituloProgreso.textContent = 'Progreso de la llamada';
+    panel.appendChild(tituloProgreso);
+
+    const progreso = calcularProgreso();
+    const barraWrap = document.createElement('div');
+    barraWrap.className = 'progreso-wrap';
+    const barra = document.createElement('div');
+    barra.className = 'progreso-barra';
+    barra.style.width = progreso + '%';
+    barraWrap.appendChild(barra);
+    panel.appendChild(barraWrap);
+
+    const progresoTexto = document.createElement('div');
+    progresoTexto.className = 'progreso-texto';
+    progresoTexto.textContent = progreso + '% completado';
+    panel.appendChild(progresoTexto);
 
     const tituloEval = document.createElement('div');
     tituloEval.className = 'rp-title';
