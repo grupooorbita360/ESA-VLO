@@ -109,8 +109,8 @@ function sufijo(programa) {
 
 function evaluarOperador(operator, valorReal, valorEsperado) {
   valorReal = (valorReal || '').toString().trim();
-  const op = (operator || '=').toString().trim().toUpperCase();
-  if (op === '=') {
+  const op = (operator || 'EQ').toString().trim().toUpperCase();
+  if (op === 'EQ') {
     return valorReal.toUpperCase() === valorEsperado.toString().trim().toUpperCase();
   }
   if (op === 'IN') {
@@ -227,4 +227,102 @@ function buscarContratoHistorico(contratoBuscado) {
   } catch (e) {
     return 'ERROR: ' + e.toString();
   }
+}
+
+// ============================================================
+// MIGRACION UNICA -- correr una sola vez desde el editor de Apps Script
+// (elegir "migracionUnicaMotorVLO" en el desplegable de funciones y
+// Ejecutar), revisar Preguntas_USP / Reglas_USP / Condiciones_Reglas,
+// y BORRAR TODO ESTE BLOQUE del proyecto una vez confirmado.
+//
+// Corrige en Motor-VLO-USP:
+//  1. Operator "=" -> "EQ" en Reglas_USP y Condiciones_Reglas (el simbolo
+//     "=" hacia que Sheets leyera la celda como formula rota -> #ERROR!).
+//  2. Los dos Mostrar_Si que estaban en texto libre, al formato
+//     "Question_ID: Valor" ya identificado.
+//  3. La columna Tipo en Preguntas_USP, colapsando el vocabulario real al
+//     conjunto cerrado de 8 tipos, y borrando las filas CONDICION_ENTRADA
+//     (esa logica ya vive en codigo, leyendo CONFIG_PRODUCTS.Services).
+// ============================================================
+function migracionUnicaMotorVLO() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  migrarOperadorAEQ_(ss.getSheetByName('Reglas_USP'));
+  migrarOperadorAEQ_(ss.getSheetByName('Condiciones_Reglas'));
+  migrarMostrarSi_(ss.getSheetByName('Preguntas_USP'));
+  migrarTipos_(ss.getSheetByName('Preguntas_USP'));
+  Logger.log('Migracion completa. Revisa Preguntas_USP, Reglas_USP y Condiciones_Reglas, y borra esta funcion.');
+}
+
+function migrarOperadorAEQ_(sheet) {
+  if (!sheet) return;
+  const values = sheet.getDataRange().getValues();
+  const headers = values[0].map(h => h.toString().trim());
+  const col = headers.indexOf('Operator');
+  if (col === -1) return;
+  for (let i = 1; i < values.length; i++) {
+    if (values[i][col].toString().trim() === '=') {
+      sheet.getRange(i + 1, col + 1).setValue('EQ');
+    }
+  }
+}
+
+function migrarMostrarSi_(sheet) {
+  if (!sheet) return;
+  const values = sheet.getDataRange().getValues();
+  const headers = values[0].map(h => h.toString().trim());
+  const colQuestionId = headers.indexOf('Question_ID');
+  const colScript = headers.indexOf('Script / Pregunta');
+  const colMostrarSi = headers.indexOf('Mostrar_Si');
+  if (colMostrarSi === -1) return;
+  for (let i = 1; i < values.length; i++) {
+    const qid = (values[i][colQuestionId] || '').toString().trim();
+    const script = (values[i][colScript] || '').toString();
+    if (qid === 'Q_SOLTERA_DIVORCIO') {
+      sheet.getRange(i + 1, colMostrarSi + 1).setValue('Q_ESTADO_CIVIL_DETALLE: Soltera legal');
+    }
+    if (script.indexOf('Sigue diciendo No') !== -1) {
+      sheet.getRange(i + 1, colMostrarSi + 1).setValue('Q_SEGUNDA_OFERTA: Si seguro');
+    }
+  }
+}
+
+function migrarTipos_(sheet) {
+  if (!sheet) return;
+  const mapaDirecto = {
+    'SCRIPT': 'SCRIPT', 'SCRIPT_VARIABLE': 'SCRIPT', 'SCRIPT_KVC': 'SCRIPT',
+    'SCRIPT_CONDICIONAL': 'SCRIPT', 'REBUTTAL': 'SCRIPT', 'CORRECCION_EXTERNA': 'SCRIPT',
+    'CAMPO_PASIVO': 'CAMPO_PASIVO',
+    'EVALUACION_AGENTE': 'EVALUACION_AGENTE',
+    'EVALUACION_CONTINUA': 'EVALUACION_CONTINUA',
+    'ACCION': 'ACCION', 'ACCION_SISTEMA': 'ACCION',
+    'PANEL': 'PANEL_INFO', 'CALIFICACION_CALCULADA': 'PANEL_INFO',
+    'FLAGS_CALCULADOS': 'PANEL_INFO', 'VERIFICACION_POR_INCIDENTE': 'PANEL_INFO'
+  };
+  // Estos deciden PREGUNTA vs LIBRE segun si la fila trae Opciones o no.
+  const decidePorOpciones = ['VERIFICACION', 'EXPLORATORIO', 'DISCOVERY', 'SONDEO'];
+
+  const values = sheet.getDataRange().getValues();
+  const headers = values[0].map(h => h.toString().trim());
+  const colTipo = headers.indexOf('Tipo');
+  const colOpciones = headers.indexOf('Opciones');
+  if (colTipo === -1) return;
+
+  const filasABorrar = [];
+  for (let i = 1; i < values.length; i++) {
+    const tipoActual = (values[i][colTipo] || '').toString().trim().toUpperCase();
+    if (!tipoActual) continue;
+    if (tipoActual === 'CONDICION_ENTRADA') { filasABorrar.push(i + 1); continue; }
+
+    let nuevoTipo = mapaDirecto[tipoActual];
+    if (!nuevoTipo && decidePorOpciones.indexOf(tipoActual) !== -1) {
+      const tieneOpciones = (values[i][colOpciones] || '').toString().trim() !== '';
+      nuevoTipo = tieneOpciones ? 'PREGUNTA' : 'LIBRE';
+    }
+    if (!nuevoTipo) continue; // LIBRE ya queda igual; tipo desconocido se deja para revisar a mano
+
+    if (nuevoTipo !== tipoActual) sheet.getRange(i + 1, colTipo + 1).setValue(nuevoTipo);
+  }
+
+  // Borrar de abajo hacia arriba para no correr los indices de las filas restantes.
+  filasABorrar.sort((a, b) => b - a).forEach(fila => sheet.deleteRow(fila));
 }

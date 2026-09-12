@@ -3,14 +3,16 @@
   // Estado en memoria de la llamada. Nada de esto se escribe al
   // Sheet hasta que se llama a guardarLlamada() en Fase 7 (Cierre).
   //
-  // El Tipo real de Preguntas_[Programa] (Motor-VLO-USP) usa mas
-  // variantes que el vocabulario original: SCRIPT_VARIABLE / SCRIPT_KVC /
-  // SCRIPT_CONDICIONAL / REBUTTAL son variantes de SCRIPT; VERIFICACION /
-  // EXPLORATORIO / DISCOVERY / SONDEO / PREGUNTA son la misma UI de
-  // captura (chips si hay Opciones, texto libre si no). tipoCategoria()
-  // agrupa todo eso. El Checkpoint tampoco es una pantalla fija aparte:
-  // es la Fase "Checkpoint - Evaluacion VLO", con filas CALIFICACION_CALCULADA
-  // y FLAGS_CALCULADOS en su lugar natural del guion.
+  // Preguntas_USP.Tipo ya fue migrado (ver migracionUnicaMotorVLO en
+  // Code.gs) al conjunto cerrado de 8 tipos: SCRIPT, PREGUNTA, LIBRE,
+  // CAMPO_PASIVO, EVALUACION_AGENTE, EVALUACION_CONTINUA, ACCION,
+  // PANEL_INFO. PANEL_INFO agrupa 4 comportamientos que antes eran tipos
+  // separados (panel de oportunidades, calificacion calculada, flags
+  // calculados, revision de incidentes) -- como ya no se distinguen por
+  // Tipo, subtipoPanelInfo() los reconoce por el contenido fijo de su
+  // propio texto. El Checkpoint no es una pantalla fija aparte: es la
+  // Fase "Checkpoint - Evaluacion VLO", con sus dos filas PANEL_INFO
+  // (calificacion + flags) en su lugar natural del guion.
   // ============================================================
   const state = {
     programa: '',
@@ -178,22 +180,10 @@
   }
 
   // ---- Tipos de contenido ----
-  // Agrupa las variantes reales de Tipo en las categorias de UI que renderizamos.
+  // Conjunto cerrado de 8 tipos (post-migracion) -- solo normaliza mayusculas/espacios.
 
   function tipoCategoria(tipo) {
-    const t = (tipo || '').toString().trim().toUpperCase();
-    if (['SCRIPT', 'SCRIPT_VARIABLE', 'SCRIPT_KVC', 'SCRIPT_CONDICIONAL', 'REBUTTAL'].indexOf(t) !== -1) return 'SCRIPT';
-    if (['VERIFICACION', 'EXPLORATORIO', 'DISCOVERY', 'PREGUNTA', 'SONDEO'].indexOf(t) !== -1) return 'PREGUNTA';
-    if (t === 'LIBRE') return 'LIBRE';
-    if (t === 'CAMPO_PASIVO') return 'CAMPO_PASIVO';
-    if (t === 'EVALUACION_AGENTE') return 'EVALUACION_AGENTE';
-    if (t === 'EVALUACION_CONTINUA') return 'EVALUACION_CONTINUA';
-    if (t === 'VERIFICACION_POR_INCIDENTE') return 'VERIFICACION_POR_INCIDENTE';
-    if (t === 'CALIFICACION_CALCULADA') return 'CALIFICACION_CALCULADA';
-    if (t === 'FLAGS_CALCULADOS') return 'FLAGS_CALCULADOS';
-    if (t === 'PANEL' || t === 'PANEL_INFO') return 'PANEL';
-    if (t === 'CONDICION_ENTRADA') return 'CONDICION_ENTRADA'; // documentacion, no se renderiza
-    return 'DESCONOCIDO';
+    return (tipo || '').toString().trim().toUpperCase();
   }
 
   // ---- Sidebar / Fases ----
@@ -244,8 +234,10 @@
       if (!cumpleMostrarSi(fila.Mostrar_Si)) return;
       const el = renderFila(fila);
       if (el) { content.appendChild(el); visibles++; }
-      const cat = tipoCategoria(fila.Tipo);
-      if (cat === 'CALIFICACION_CALCULADA' || cat === 'FLAGS_CALCULADOS') necesitaEvaluacion = true;
+      if (tipoCategoria(fila.Tipo) === 'PANEL_INFO') {
+        const sub = subtipoPanelInfo(fila);
+        if (sub === 'CALIFICACION' || sub === 'FLAGS') necesitaEvaluacion = true;
+      }
     });
 
     if (!visibles) {
@@ -271,12 +263,24 @@
       case 'LIBRE': return renderLibre(fila);
       case 'CAMPO_PASIVO': return renderCampoPasivo(fila);
       case 'EVALUACION_AGENTE': return renderEvaluacionAgente(fila);
-      case 'VERIFICACION_POR_INCIDENTE': return renderVerificacionPorIncidente(fila);
-      case 'CALIFICACION_CALCULADA': return renderCalificacionCalculada(fila);
-      case 'FLAGS_CALCULADOS': return renderFlagsCalculados(fila);
-      case 'PANEL': return renderPanelInfo(fila);
-      default: return null; // CONDICION_ENTRADA y tipos no reconocidos: no se renderizan
+      case 'ACCION': return renderAccion(fila);
+      case 'PANEL_INFO': return renderPanelInfoDispatch(fila);
+      default: return null; // EVALUACION_CONTINUA (panel derecho) y tipos no reconocidos
     }
+  }
+
+  function renderAccion(fila) {
+    const div = document.createElement('div');
+    div.className = 'block';
+    const btn = document.createElement('button');
+    btn.className = 'action-btn';
+    btn.textContent = fila['Script / Pregunta'] || fila.Question_ID || 'Ejecutar';
+    btn.onclick = () => {
+      if (fila.Question_ID) state.respuestas[fila.Question_ID] = 'EJECUTADO_' + new Date().toISOString();
+      renderPanel();
+    };
+    div.appendChild(btn);
+    return div;
   }
 
   function renderScript(fila) {
@@ -380,7 +384,29 @@
     return div;
   }
 
-  function renderPanelInfo(fila) {
+  // PANEL_INFO agrupa 4 comportamientos que antes eran tipos separados. Como
+  // ya no se distinguen por Tipo, se reconocen por el contenido fijo de su
+  // propio texto (el de incidentes tambien tiene Question_ID poblado).
+  function subtipoPanelInfo(fila) {
+    if (fila.Question_ID === 'Q_INCIDENTES_RESUELTOS') return 'INCIDENTES';
+    const texto = (fila['Script / Pregunta'] || '').toString().toLowerCase();
+    if (texto.indexOf('calificacion sugerida') !== -1 || texto.indexOf('calificación sugerida') !== -1) return 'CALIFICACION';
+    if (texto.indexOf('green flags') !== -1 && texto.indexOf('red flags') !== -1) return 'FLAGS';
+    if (texto.indexOf('oportunidades identificadas') !== -1) return 'OPORTUNIDADES';
+    return 'GENERICO';
+  }
+
+  function renderPanelInfoDispatch(fila) {
+    switch (subtipoPanelInfo(fila)) {
+      case 'INCIDENTES': return renderVerificacionPorIncidente(fila);
+      case 'CALIFICACION': return renderCalificacionCalculada(fila);
+      case 'FLAGS': return renderFlagsCalculados(fila);
+      case 'OPORTUNIDADES': return renderPanelOportunidades(fila);
+      default: return renderPanelGenerico(fila);
+    }
+  }
+
+  function renderPanelGenerico(fila) {
     const div = document.createElement('div');
     div.className = 'block';
     const box = document.createElement('div');
@@ -390,7 +416,49 @@
     return div;
   }
 
-  // ---- Incidentes (revision en vivo, fila VERIFICACION_POR_INCIDENTE) ----
+  function noEsSi(valor) {
+    return (valor || '').toString().trim().toUpperCase() !== 'SI';
+  }
+
+  // Cuenta como oportunidad: Q_VIAJA_ASEGURADO != Si, Q_TRANSPORTE_RESUELTO != Si,
+  // Q_INTERES_ACTIVIDADES = "Todavia no he pensado en eso".
+  function renderPanelOportunidades(fila) {
+    const div = document.createElement('div');
+    div.className = 'block';
+    const label = document.createElement('div');
+    label.className = 'block-label';
+    label.textContent = 'Oportunidades identificadas en esta llamada';
+    div.appendChild(label);
+
+    const oportunidades = [];
+    if (noEsSi(state.respuestas.Q_VIAJA_ASEGURADO)) {
+      oportunidades.push('No viaja asegurado -- ofrecer SafeKit/Propack.');
+    }
+    if (noEsSi(state.respuestas.Q_TRANSPORTE_RESUELTO)) {
+      oportunidades.push('Transporte sin resolver -- ofrecer upgrade.');
+    }
+    if ((state.respuestas.Q_INTERES_ACTIVIDADES || '').toString().trim() === 'Todavia no he pensado en eso') {
+      oportunidades.push('Sin actividades definidas -- ofrecer recomendaciones.');
+    }
+
+    const box = document.createElement('div');
+    if (!oportunidades.length) {
+      box.className = 'empty-state';
+      box.textContent = 'Sin oportunidades detectadas -- se puede pasar directo a Cierre.';
+    } else {
+      box.className = 'panel-info';
+      oportunidades.forEach(op => {
+        const item = document.createElement('div');
+        item.className = 'checklist-item';
+        item.textContent = op;
+        box.appendChild(item);
+      });
+    }
+    div.appendChild(box);
+    return div;
+  }
+
+  // ---- Incidentes (revision en vivo, subtipo PANEL_INFO/INCIDENTES) ----
 
   function renderVerificacionPorIncidente(fila) {
     const div = document.createElement('div');
@@ -480,7 +548,7 @@
     });
   }
 
-  // ---- Checkpoint (Fase "Checkpoint - Evaluacion VLO": CALIFICACION_CALCULADA + FLAGS_CALCULADOS) ----
+  // ---- Checkpoint (Fase "Checkpoint - Evaluacion VLO": subtipos CALIFICACION + FLAGS) ----
 
   function renderCalificacionCalculada(fila) {
     state.filaCalificacion = fila;
