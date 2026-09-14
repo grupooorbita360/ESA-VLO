@@ -37,7 +37,19 @@ const MOCK_DB = {
     camposVariables: [
       { Variable_ID: 'CLIENT_NAME', Etiqueta: 'Nombre del cliente', Tipo: 'Texto', Se_llena: 'Al iniciar', Notas: '' }
     ],
-    notes: [],
+    // Notes_[Programa]: de aqui salen los Titulo_Corto del resumen y las
+    // notas VLO/MKT/RED, y el texto de los Green_Flag/Red_Flag automaticos.
+    notes: [
+      { 'Seccion / Campo': 'Q_TIEMPO_OK', Titulo_Corto: 'Buen momento', VLO: 'X', MKT: '', RED: '', Green_Flag: '', Red_Flag: '' },
+      { 'Seccion / Campo': 'Q_RELACION', Titulo_Corto: 'Relacion con socio', VLO: 'X', MKT: 'X', RED: '', Green_Flag: '', Red_Flag: '' },
+      { 'Seccion / Campo': 'Q_VIAJA_ASEGURADO / Q_TRANSPORTE_RESUELTO', Titulo_Corto: 'Oportunidades de servicio', VLO: 'X', MKT: 'X', RED: '', Green_Flag: '', Red_Flag: '' },
+      { 'Seccion / Campo': 'Q_FRECUENCIA_VIAJE', Titulo_Corto: 'Frecuencia de viaje', VLO: 'X', MKT: 'X', RED: '', Green_Flag: '5+ viajes', Red_Flag: '' },
+      { 'Seccion / Campo': 'Q_CONOCE_DESTINO', Titulo_Corto: 'Conoce destino', VLO: 'X', MKT: '', RED: '', Green_Flag: 'Si conoce bien el destino', Red_Flag: '' },
+      { 'Seccion / Campo': 'Q_OTRO_CLUB', Titulo_Corto: 'Otro club vacacional', VLO: 'X', MKT: 'X', RED: '', Green_Flag: 'Si es miembro de otro club', Red_Flag: '' },
+      { 'Seccion / Campo': 'Q_ACEPTA_PRESENTACION', Titulo_Corto: 'Acepta presentacion', VLO: 'X', MKT: '', RED: 'X', Green_Flag: '', Red_Flag: 'No = renuente' }
+      // Q_COMENTARIOS y EVAL_TRATO NO tienen fila aqui a proposito -- deben
+      // quedar contestadas pero OMITIDAS del resumen (sin mapeo = se omite).
+    ],
 
     // Preguntas_[Programa]: guion sintetico, 4 fases + Checkpoint + Cierre.
     // Tipo ya viene en el conjunto cerrado de 8 (post-migracion real).
@@ -59,6 +71,10 @@ const MOCK_DB = {
       { Fase: '2. Verificacion', Orden: 6, Question_ID: 'Q_VIAJA_ASEGURADO', Tipo: 'PREGUNTA', 'Script / Pregunta': '¿Normalmente viajan con algun seguro?', Opciones: 'Si, No', Mostrar_Si: '', Obligatorio: '' },
       { Fase: '2. Verificacion', Orden: 7, Question_ID: 'Q_TRANSPORTE_RESUELTO', Tipo: 'PREGUNTA', 'Script / Pregunta': '¿Ya tienen resuelto el transporte?', Opciones: 'Si, No', Mostrar_Si: '', Obligatorio: '' },
       { Fase: '2. Verificacion', Orden: 8, Question_ID: 'Q_INTERES_ACTIVIDADES', Tipo: 'PREGUNTA', 'Script / Pregunta': '¿Ya saben que actividades les gustaria hacer?', Opciones: 'Si ya se, Me gustaria que me recomendaran, Todavia no he pensado en eso', Mostrar_Si: '', Obligatorio: '' },
+      { Fase: '2. Verificacion', Orden: 9, Question_ID: 'Q_FRECUENCIA_VIAJE', Tipo: 'PREGUNTA', 'Script / Pregunta': '¿Mas o menos cuantas veces han viajado con nosotros?', Opciones: '1-2, 3-4, 5+', Mostrar_Si: '', Obligatorio: '' },
+      { Fase: '2. Verificacion', Orden: 10, Question_ID: 'Q_CONOCE_DESTINO', Tipo: 'PREGUNTA', 'Script / Pregunta': '¿Conocen bien este destino?', Opciones: 'Si, No', Mostrar_Si: '', Obligatorio: '' },
+      { Fase: '2. Verificacion', Orden: 11, Question_ID: 'Q_OTRO_CLUB', Tipo: 'PREGUNTA', 'Script / Pregunta': '¿Son miembros de algun otro club vacacional?', Opciones: 'Si, No', Mostrar_Si: '', Obligatorio: '' },
+      { Fase: '2. Verificacion', Orden: 12, Question_ID: 'Q_ACEPTA_PRESENTACION', Tipo: 'PREGUNTA', 'Script / Pregunta': '¿Estan de acuerdo en asistir a la presentacion?', Opciones: 'Si, No', Mostrar_Si: '', Obligatorio: '' },
 
       { Fase: '3. Servicios adicionales', Orden: 1, Question_ID: 'Q_INTERES_SERVICIO', Tipo: 'PREGUNTA', 'Script / Pregunta': '¿Te interesa contratar transporte adicional?', Opciones: 'Si, No', Mostrar_Si: '', Obligatorio: '' },
       { Fase: '3. Servicios adicionales', Orden: 2, Question_ID: '', Tipo: 'PANEL_INFO', 'Script / Pregunta': "Panel: 'Oportunidades identificadas en esta llamada' -- calculado desde Q_VIAJA_ASEGURADO / Q_TRANSPORTE_RESUELTO / Q_INTERES_ACTIVIDADES.", Opciones: '', Mostrar_Si: '', Obligatorio: '' },

@@ -31,7 +31,10 @@
     reglasDisparadas: [],
     checkpointOverride: null,
     filaCalificacion: null,
-    idioma: 'ES'    // 'ES' | 'EN' -- ver TEXTOS / t() / textoFila() mas abajo
+    idioma: 'ES',   // 'ES' | 'EN' -- ver TEXTOS / t() / textoFila() mas abajo
+    titulosCortos: {},     // Question_ID -> Titulo_Corto (desde Notes_[Programa])
+    mostrandoNotas: false, // true mientras se ve la caja de notas VLO/MKT/RED
+    llamadaGuardadaOk: false // evita reintentar guardarLlamada() si ya se guardo bien
   };
 
   // ============================================================
@@ -49,7 +52,7 @@
   const TEXTOS = {
     ES: {
       labelAgente: 'Agente', labelPrograma: 'Programa', labelContrato: 'Contrato', labelCliente: 'Cliente',
-      btnIniciar: 'Iniciar', btnReiniciar: 'Reiniciar', btnBuscar: 'Buscar', btnQuitar: 'Quitar', btnGuardar: 'Guardar llamada',
+      btnIniciar: 'Iniciar', btnReiniciar: 'Reiniciar', btnBuscar: 'Buscar', btnQuitar: 'Quitar',
       placeholderContrato: 'Numero de contrato', placeholderCliente: 'Nombre del cliente',
       placeholderContratoTopbar: 'Escribe o busca...', placeholderCampoPasivo: 'Se llena solo si surge...', placeholderOtro: 'Especifica...',
       cargando: 'Cargando...', sinProgramas: 'Sin programas activos',
@@ -73,16 +76,19 @@
       tituloProgreso: 'Progreso de la llamada', sufijoProgreso: '% completado',
       tituloEvalContinua: 'Evaluación continua', sinIndicadores: 'Sin indicadores continuos.', clickParaCambiar: 'click para cambiar',
       tituloResumen: 'Resumen en vivo', sinRespuestas: 'Todavía no hay respuestas.',
-      labelDuracion: 'Duración de la llamada (minutos)',
       llamadaGuardada: 'Llamada guardada correctamente.', problemaGuardar: 'Hubo un problema al guardar: ',
       alertaContratoVacio: 'Escribe un número de contrato para buscar.', sinHistorico: 'No se encontró historial para ese contrato.',
       historicoTitulo: 'Última llamada registrada:', historicoFecha: 'Fecha:', historicoPrograma: 'Programa:',
       historicoAgente: 'Agente:', historicoCalificacion: 'Calificación:', historicoIncidentesNum: 'Incidentes:',
-      historicoIncidentesTitulo: 'Incidentes registrados:'
+      historicoIncidentesTitulo: 'Incidentes registrados:',
+      tituloPuntosCriticos: 'Puntos críticos', sinPuntosCriticos: 'Sin puntos críticos definidos en el Sheet.',
+      btnFinalizarLlamada: 'Finalizar llamada', tituloNotas: 'Notas de la llamada',
+      btnCopiar: 'Copiar al portapapeles', copiado: '¡Copiado!', sinNotasCategoria: '(Sin notas para esta categoría)',
+      guardando: 'Guardando...'
     },
     EN: {
       labelAgente: 'Agent', labelPrograma: 'Program', labelContrato: 'Contract', labelCliente: 'Client',
-      btnIniciar: 'Start', btnReiniciar: 'Restart', btnBuscar: 'Search', btnQuitar: 'Remove', btnGuardar: 'Save call',
+      btnIniciar: 'Start', btnReiniciar: 'Restart', btnBuscar: 'Search', btnQuitar: 'Remove',
       placeholderContrato: 'Contract number', placeholderCliente: 'Client name',
       placeholderContratoTopbar: 'Type or search...', placeholderCampoPasivo: 'Only fill in if it comes up...', placeholderOtro: 'Specify...',
       cargando: 'Loading...', sinProgramas: 'No active programs',
@@ -106,12 +112,15 @@
       tituloProgreso: 'Call progress', sufijoProgreso: '% complete',
       tituloEvalContinua: 'Ongoing evaluation', sinIndicadores: 'No ongoing indicators.', clickParaCambiar: 'click to change',
       tituloResumen: 'Live summary', sinRespuestas: 'No answers yet.',
-      labelDuracion: 'Call duration (minutes)',
       llamadaGuardada: 'Call saved successfully.', problemaGuardar: 'There was a problem saving: ',
       alertaContratoVacio: 'Enter a contract number to search.', sinHistorico: 'No history found for that contract.',
       historicoTitulo: 'Last call on record:', historicoFecha: 'Date:', historicoPrograma: 'Program:',
       historicoAgente: 'Agent:', historicoCalificacion: 'Rating:', historicoIncidentesNum: 'Incidents:',
-      historicoIncidentesTitulo: 'Logged incidents:'
+      historicoIncidentesTitulo: 'Logged incidents:',
+      tituloPuntosCriticos: 'Critical points', sinPuntosCriticos: 'No critical points defined in the Sheet.',
+      btnFinalizarLlamada: 'Finish call', tituloNotas: 'Call notes',
+      btnCopiar: 'Copy to clipboard', copiado: 'Copied!', sinNotasCategoria: '(No notes for this category)',
+      guardando: 'Saving...'
     }
   };
 
@@ -188,6 +197,7 @@
   function onDataInicial(data) {
     if (data && data.error) { onError(data.error); return; }
     state.data = data;
+    state.titulosCortos = construirMapaTitulosCortos();
     const selAgente = document.getElementById('sel-agente');
     selAgente.innerHTML = '';
     (data.agentes || []).forEach(nombre => {
@@ -418,6 +428,7 @@
   // ---- Contenido: flujo continuo o captura fuera de orden ----
 
   function renderContent() {
+    if (state.mostrandoNotas) return; // la caja de notas ya esta pintada, no se pisa con el flujo
     if (state.modoCaptura) renderCapturaFueraDeOrden();
     else renderFlujoContinuo();
   }
@@ -480,7 +491,6 @@
 
     let faseAnterior = null;
     let necesitaEvaluacion = false;
-    let llegoAlFinal = true;
 
     for (let i = 0; i < filas.length; i++) {
       const fila = filas[i];
@@ -497,14 +507,10 @@
         if (sub === 'CALIFICACION' || sub === 'FLAGS') necesitaEvaluacion = true;
       }
 
-      if (filaBloquea(fila)) { llegoAlFinal = false; break; }
+      if (filaBloquea(fila)) break;
     }
 
     if (necesitaEvaluacion) evaluarYActualizarCheckpoint();
-
-    // Solo se ofrece "Guardar llamada" cuando el flujo llego de verdad hasta
-    // el final del guion (nada quedo bloqueando el avance en el camino).
-    if (llegoAlFinal) renderCierreFinal(content);
 
     renderPanel();
     renderSidebarNav();
@@ -630,6 +636,7 @@
         delete state.mostrarOtroPara[fila.Question_ID];
         state.respuestas[fila.Question_ID] = valorBase;
         renderContent();
+        avanzarDentroDeFase(fila.Fase);
       };
       opts.appendChild(chip);
     });
@@ -729,7 +736,7 @@
       const btn = document.createElement('button');
       btn.className = 'eval-btn' + (valorActual === valorBase && claseSel ? ' ' + claseSel : '');
       btn.textContent = etiqueta;
-      btn.onclick = () => { state.respuestas[fila.Question_ID] = valorBase; renderContent(); };
+      btn.onclick = () => { state.respuestas[fila.Question_ID] = valorBase; renderContent(); avanzarDentroDeFase(fila.Fase); };
       wrap.appendChild(btn);
     });
     div.appendChild(wrap);
@@ -1031,12 +1038,217 @@
     });
   }
 
+  // ---- Notes_[Programa]: Titulo_Corto, flags automaticos, notas finales ----
+
+  function estaContestada(qid) {
+    const v = state.respuestas[qid];
+    return v !== undefined && v !== '';
+  }
+
+  // Notes_[Programa] marca sus columnas VLO/MKT/RED/Green_Flag/Red_Flag con
+  // una "X" literal, no con TRUE/SI/YES como el resto del Sheet.
+  function tieneMarca(valor) {
+    return (valor || '').toString().trim().toUpperCase() === 'X';
+  }
+
+  // "Seccion / Campo" a veces trae varios Question_ID separados por "/"
+  // (ej. "Q_PRESENTACION_RECIENTE_DETALLE / Q_MOTIVO_NO_COMPRO").
+  function idsDeSeccion(seccion) {
+    return (seccion || '').toString().split('/').map(s => s.trim()).filter(Boolean);
+  }
+
+  function construirMapaTitulosCortos() {
+    const mapa = {};
+    (state.data.notes || []).forEach(nota => {
+      const titulo = nota.Titulo_Corto;
+      if (!titulo) return;
+      idsDeSeccion(nota['Seccion / Campo']).forEach(qid => { mapa[qid] = titulo; });
+    });
+    return mapa;
+  }
+
+  function buscarNotaDeQid(qid) {
+    return (state.data.notes || []).find(n => idsDeSeccion(n['Seccion / Campo']).includes(qid));
+  }
+
+  // Solo los 4 casos donde el Green/Red Flag se puede inferir de una
+  // respuesta exacta -- los que dependen de KVC o de EVAL_PREFERRED se
+  // quedan fuera a propósito, no se inventa logica para esos. El texto del
+  // flag sale de la propia columna Green_Flag/Red_Flag de Notes_USP.
+  function detectarFlagsAutomaticos() {
+    const condiciones = [
+      { qid: 'Q_FRECUENCIA_VIAJE', valor: '5+', columna: 'Green_Flag', tipo: 'green' },
+      { qid: 'Q_CONOCE_DESTINO', valor: 'Si', columna: 'Green_Flag', tipo: 'green' },
+      { qid: 'Q_OTRO_CLUB', valor: 'Si', columna: 'Green_Flag', tipo: 'green' },
+      { qid: 'Q_ACEPTA_PRESENTACION', valor: 'No', columna: 'Red_Flag', tipo: 'red' }
+    ];
+    const flags = [];
+    condiciones.forEach(c => {
+      if ((state.respuestas[c.qid] || '').toString().trim().toUpperCase() !== c.valor.toUpperCase()) return;
+      const nota = buscarNotaDeQid(c.qid);
+      const texto = (nota && nota[c.columna]) ? nota[c.columna] : c.qid;
+      flags.push({ tipo: c.tipo, texto: texto });
+    });
+    return flags;
+  }
+
+  // Une, para cada Question_ID ya contestado, "{Titulo_Corto}: {respuesta}"
+  // en las categorias (VLO/MKT/RED) donde Notes_USP marco esa fila con "X".
+  function generarNotas() {
+    const secciones = { VLO: [], MKT: [], RED: [] };
+    Object.keys(state.respuestas).forEach(qid => {
+      if (!estaContestada(qid)) return;
+      const nota = buscarNotaDeQid(qid);
+      if (!nota || !nota.Titulo_Corto) return;
+      ['VLO', 'MKT', 'RED'].forEach(col => {
+        if (tieneMarca(nota[col])) secciones[col].push(nota.Titulo_Corto + ': ' + state.respuestas[qid]);
+      });
+    });
+    return secciones;
+  }
+
+  // Patron clasico de Apps Script para copiar al portapapeles: un textarea
+  // oculto + execCommand('copy') funciona incluso dentro del iframe
+  // sandboxeado del Web App, donde navigator.clipboard puede no tener permiso.
+  function copiarAlPortapapeles(texto, boton) {
+    const textarea = document.createElement('textarea');
+    textarea.value = texto;
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.select();
+    try {
+      document.execCommand('copy');
+      if (boton) {
+        const original = boton.textContent;
+        boton.textContent = t('copiado');
+        setTimeout(() => { boton.textContent = original; }, 1500);
+      }
+    } catch (e) {
+      alert(texto);
+    }
+    document.body.removeChild(textarea);
+  }
+
+  function renderCajaNotas(secciones) {
+    const content = document.getElementById('content');
+    content.innerHTML = '';
+
+    const titulo = document.createElement('div');
+    titulo.className = 'fase-header';
+    titulo.textContent = t('tituloNotas');
+    content.appendChild(titulo);
+
+    const estado = document.createElement('div');
+    estado.id = 'estado-guardado';
+    estado.className = 'empty-state';
+    estado.textContent = t('guardando');
+    content.appendChild(estado);
+
+    ['VLO', 'MKT', 'RED'].forEach(col => {
+      const bloque = document.createElement('div');
+      bloque.className = 'block';
+      const label = document.createElement('div');
+      label.className = 'block-label';
+      label.textContent = col;
+      bloque.appendChild(label);
+
+      const texto = (secciones[col] || []).join('\n');
+      const textarea = document.createElement('textarea');
+      textarea.className = 'free-text';
+      textarea.rows = 5;
+      textarea.readOnly = true;
+      textarea.value = texto || t('sinNotasCategoria');
+      bloque.appendChild(textarea);
+
+      const copiarBtn = document.createElement('button');
+      copiarBtn.className = 'btn-mini';
+      copiarBtn.style.marginTop = '6px';
+      copiarBtn.textContent = t('btnCopiar');
+      copiarBtn.onclick = () => copiarAlPortapapeles(texto, copiarBtn);
+      bloque.appendChild(copiarBtn);
+
+      content.appendChild(bloque);
+    });
+
+    const volverBtn = document.createElement('button');
+    volverBtn.className = 'btn-mini';
+    volverBtn.style.marginTop = '18px';
+    volverBtn.textContent = t('volverAlFlujo');
+    volverBtn.onclick = () => { state.mostrandoNotas = false; renderContent(); };
+    content.appendChild(volverBtn);
+  }
+
+  // Guarda una sola vez por llamada -- si el agente vuelve a abrir la caja de
+  // notas (para copiar algo que se le paso), no se reintenta guardarLlamada().
+  function guardarLlamadaAhora() {
+    const flags = (state.reglasDisparadas || [])
+      .filter(r => esVerdadero(r.Show_Alert))
+      .map(r => r.Rule_ID)
+      .join(', ');
+
+    const datos = {
+      programa: state.programa,
+      contrato: state.contrato,
+      cliente: state.cliente,
+      agente: state.agente,
+      duracion: calcularDuracionMinutos(),
+      calificacionFinal: state.checkpointOverride || '',
+      flags: flags,
+      respuestas: state.respuestas,
+      incidentes: state.incidentes
+    };
+
+    google.script.run.withSuccessHandler(resp => {
+      const estado = document.getElementById('estado-guardado');
+      if (resp === 'OK') {
+        state.llamadaGuardadaOk = true;
+        if (estado) estado.textContent = t('llamadaGuardada');
+      } else {
+        if (estado) estado.textContent = t('problemaGuardar') + resp;
+        alert(t('problemaGuardar') + resp);
+      }
+    }).withFailureHandler(onError).guardarLlamada(datos);
+  }
+
+  function abrirFinalizarLlamada() {
+    state.mostrandoNotas = true;
+    renderCajaNotas(generarNotas());
+    if (!state.llamadaGuardadaOk) {
+      guardarLlamadaAhora();
+    } else {
+      const estado = document.getElementById('estado-guardado');
+      if (estado) estado.textContent = t('llamadaGuardada');
+    }
+  }
+
+  // Tras contestar, baja suave hasta la siguiente pregunta pendiente de la
+  // MISMA fase -- nunca salta de fase sola, eso lo sigue decidiendo el agente.
+  function avanzarDentroDeFase(fase) {
+    requestAnimationFrame(() => {
+      const pendientes = todasLasFilasVisibles().filter(f => f.Fase === fase && filaBloquea(f));
+      if (!pendientes.length) return;
+      const el = document.getElementById('q-' + normalizeKey(pendientes[0].Question_ID));
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+  }
+
   // ---- Panel derecho ----
 
+  // Orden fijo: Progreso -> Puntos criticos -> Finalizar llamada ->
+  // Evaluacion continua -> Resumen en vivo.
   function renderPanel() {
     const panel = document.getElementById('right-panel');
     panel.innerHTML = '';
 
+    renderProgresoEnPanel(panel);
+    renderPuntosCriticosEnPanel(panel);
+    renderBotonFinalizarEnPanel(panel);
+    renderEvaluacionContinuaEnPanel(panel);
+    renderResumenEnPanel(panel);
+  }
+
+  function renderProgresoEnPanel(panel) {
     const tituloProgreso = document.createElement('div');
     tituloProgreso.className = 'rp-title';
     tituloProgreso.textContent = t('tituloProgreso');
@@ -1055,7 +1267,58 @@
     progresoTexto.className = 'progreso-texto';
     progresoTexto.textContent = progreso + t('sufijoProgreso');
     panel.appendChild(progresoTexto);
+  }
 
+  // "Punto critico" = fila con Obligatorio = SI, actualmente visible
+  // (respeta Mostrar_Si/Servicios), de un tipo que en verdad se contesta.
+  // El Titulo_Corto sale de Notes_USP cuando existe; si no, texto truncado.
+  function renderPuntosCriticosEnPanel(panel) {
+    const titulo = document.createElement('div');
+    titulo.className = 'rp-title';
+    titulo.style.marginTop = '18px';
+    titulo.textContent = t('tituloPuntosCriticos');
+    panel.appendChild(titulo);
+
+    const criticos = todasLasFilasVisibles().filter(f => {
+      const cat = tipoCategoria(f.Tipo);
+      return esVerdadero(f.Obligatorio) && (cat === 'PREGUNTA' || cat === 'EVALUACION_AGENTE' || cat === 'LIBRE');
+    });
+
+    if (!criticos.length) {
+      const vacio = document.createElement('div');
+      vacio.className = 'empty-state';
+      vacio.textContent = t('sinPuntosCriticos');
+      panel.appendChild(vacio);
+      return;
+    }
+
+    criticos.forEach(fila => {
+      const contestada = estaContestada(fila.Question_ID);
+      const row = document.createElement('div');
+      row.className = 'rp-eval-row';
+      const label = document.createElement('span');
+      label.textContent = state.titulosCortos[fila.Question_ID] || truncar(textoFila(fila, 'Script / Pregunta'), 30);
+      const marca = document.createElement('span');
+      marca.className = contestada ? 'punto-critico-ok' : 'punto-critico-pendiente';
+      marca.textContent = contestada ? '✓' : '⚠';
+      row.appendChild(label);
+      row.appendChild(marca);
+      panel.appendChild(row);
+    });
+  }
+
+  // Siempre visible, sin condicion de que el Checkpoint ya este resuelto.
+  function renderBotonFinalizarEnPanel(panel) {
+    const btn = document.createElement('button');
+    btn.className = 'action-btn';
+    btn.style.width = '100%';
+    btn.style.margin = '4px 0 18px';
+    btn.textContent = t('btnFinalizarLlamada');
+    btn.onclick = abrirFinalizarLlamada;
+    panel.appendChild(btn);
+  }
+
+  function renderEvaluacionContinuaEnPanel(panel) {
     const tituloEval = document.createElement('div');
     tituloEval.className = 'rp-title';
     tituloEval.textContent = t('tituloEvalContinua');
@@ -1099,86 +1362,47 @@
       row.appendChild(dot);
       panel.appendChild(row);
     });
+  }
 
+  // Solo muestra las respuestas que SI tienen fila en Notes_USP (Titulo_Corto) --
+  // si una pregunta contestada no esta mapeada, se omite por completo en vez
+  // de mostrarse a medias con su Question_ID crudo. Debajo, los Green/Red
+  // Flags que se pueden inferir de una respuesta exacta (ver detectarFlagsAutomaticos).
+  function renderResumenEnPanel(panel) {
     const tituloResumen = document.createElement('div');
     tituloResumen.className = 'rp-title';
     tituloResumen.style.marginTop = '18px';
     tituloResumen.textContent = t('tituloResumen');
     panel.appendChild(tituloResumen);
 
-    const respondidas = Object.keys(state.respuestas).filter(k => state.respuestas[k] !== '' && state.respuestas[k] !== undefined);
-    if (!respondidas.length) {
+    const respondidasMapeadas = Object.keys(state.respuestas)
+      .filter(qid => estaContestada(qid) && state.titulosCortos[qid]);
+
+    if (!respondidasMapeadas.length) {
       const vacio = document.createElement('div');
       vacio.className = 'empty-state';
       vacio.textContent = t('sinRespuestas');
       panel.appendChild(vacio);
     } else {
-      respondidas.forEach(qid => {
-        const fila = (state.data.preguntas || []).find(p => p.Question_ID === qid);
-        const etiqueta = fila ? (textoFila(fila, 'Script / Pregunta') || qid) : qid;
+      respondidasMapeadas.forEach(qid => {
         const item = document.createElement('div');
         item.className = 'checklist-item';
-        item.textContent = etiqueta + ': ' + state.respuestas[qid];
+        item.textContent = state.titulosCortos[qid] + ': ' + state.respuestas[qid];
         panel.appendChild(item);
       });
     }
-  }
 
-  // ---- Cierre (Fase 7: duracion + guardar) ----
-
-  function renderCierreFinal(content) {
-    const duracionLabel = document.createElement('div');
-    duracionLabel.className = 'block-label';
-    duracionLabel.style.marginTop = '18px';
-    duracionLabel.textContent = t('labelDuracion');
-    content.appendChild(duracionLabel);
-
-    const duracionInput = document.createElement('input');
-    duracionInput.type = 'number';
-    duracionInput.min = '0';
-    duracionInput.className = 'free-text';
-    duracionInput.value = calcularDuracionMinutos();
-    content.appendChild(duracionInput);
-
-    const guardarBtn = document.createElement('button');
-    guardarBtn.className = 'action-btn';
-    guardarBtn.style.marginTop = '12px';
-    guardarBtn.textContent = t('btnGuardar');
-    guardarBtn.onclick = () => finalizarLlamada(duracionInput.value);
-    content.appendChild(guardarBtn);
+    detectarFlagsAutomaticos().forEach(flag => {
+      const item = document.createElement('div');
+      item.className = 'checklist-item flag-item flag-' + flag.tipo;
+      item.textContent = (flag.tipo === 'green' ? '🟢 ' : '🔴 ') + flag.texto;
+      panel.appendChild(item);
+    });
   }
 
   function calcularDuracionMinutos() {
     if (!state.startTime) return 0;
     return Math.round((Date.now() - state.startTime) / 60000);
-  }
-
-  function finalizarLlamada(duracionMinutos) {
-    const flags = (state.reglasDisparadas || [])
-      .filter(r => esVerdadero(r.Show_Alert))
-      .map(r => r.Rule_ID)
-      .join(', ');
-
-    const datos = {
-      programa: state.programa,
-      contrato: state.contrato,
-      cliente: state.cliente,
-      agente: state.agente,
-      duracion: duracionMinutos,
-      calificacionFinal: state.checkpointOverride || '',
-      flags: flags,
-      respuestas: state.respuestas,
-      incidentes: state.incidentes
-    };
-
-    google.script.run.withSuccessHandler(resp => {
-      if (resp === 'OK') {
-        alert(t('llamadaGuardada'));
-        top.location.href = top.location.href;
-      } else {
-        alert(t('problemaGuardar') + resp);
-      }
-    }).withFailureHandler(onError).guardarLlamada(datos);
   }
 
   // ---- Topbar: contrato / cliente ----
