@@ -59,11 +59,15 @@ const MOCK_DB = {
       // el resto de las filas de abajo NO tienen columna EN y deben seguir
       // viendose en español aunque el toggle este en EN (ese es el fallback).
       { Fase: '1. Apertura', Orden: 1, Question_ID: '', Tipo: 'SCRIPT', 'Script / Pregunta': 'Hola, soy [Tu nombre]. ¿Hablo con {{Client Name}}?', 'Script / Pregunta (EN)': 'Hello, this is [Your Name]. Am I speaking with {{Client Name}}?', Opciones: '', Mostrar_Si: '', Obligatorio: '' },
-      { Fase: '1. Apertura', Orden: 2, Question_ID: 'Q_TIEMPO_OK', Tipo: 'PREGUNTA', 'Script / Pregunta': '¿Es buen momento para hablar?', 'Script / Pregunta (EN)': 'Is this a good time to talk?', Opciones: 'Si, No', 'Opciones (EN)': 'Yes, No', Mostrar_Si: '', Obligatorio: 'SI' },
+      { Fase: '1. Apertura', Orden: 2, Question_ID: 'Q_TIEMPO_OK', Tipo: 'PREGUNTA', 'Script / Pregunta': '¿Es buen momento para hablar?', 'Script / Pregunta (EN)': 'Is this a good time to talk?', Opciones: 'Si, No', 'Opciones (EN)': 'Yes, No', Mostrar_Si: '', Obligatorio: 'SI', Critico: '' },
       { Fase: '1. Apertura', Orden: 3, Question_ID: '', Tipo: 'SCRIPT', 'Script / Pregunta': 'Perfecto, {{Client Name}}, gracias por tu tiempo.', Opciones: '', Mostrar_Si: 'Q_TIEMPO_OK: Si', Obligatorio: '' },
       { Fase: '1. Apertura', Orden: 4, Question_ID: 'EVAL_IDIOMA', Tipo: 'EVALUACION_CONTINUA', 'Script / Pregunta': 'Campo persistente en panel, activo desde Apertura. Verde=fluido por evidencia de la llamada (default). Naranja=duda real (acento marcado, pide repetir seguido, etc).', Opciones: 'Verde (default), Naranja', Mostrar_Si: '', Obligatorio: '' },
 
-      { Fase: '2. Verificacion', Orden: 1, Question_ID: 'Q_RELACION', Tipo: 'PREGUNTA', 'Script / Pregunta': '¿Cual es tu relacion con el socio?', Opciones: 'Amigo, Familiar directo', Mostrar_Si: '', Obligatorio: 'SI' },
+      { Fase: '2. Verificacion', Orden: 1, Question_ID: 'Q_RELACION', Tipo: 'PREGUNTA', 'Script / Pregunta': '¿Cual es tu relacion con el socio?', Opciones: 'Amigo, Familiar directo', Mostrar_Si: '', Obligatorio: 'SI', Critico: 'SI' },
+      // Obligatorio vacio + Critico SI a proposito: demuestra que son columnas
+      // independientes -- esta fila cuenta como punto critico en el panel
+      // aunque nunca se marco Obligatorio (ej. real: Q_ENTIENDE_CANCELACION).
+      { Fase: '2. Verificacion', Orden: 1.5, Question_ID: 'Q_ENTIENDE_POLITICAS', Tipo: 'PREGUNTA', 'Script / Pregunta': '¿Quedaron claras las politicas de cancelacion?', Opciones: 'Si, No', Mostrar_Si: '', Obligatorio: '', Critico: 'SI' },
       { Fase: '2. Verificacion', Orden: 2, Question_ID: 'Q_COMENTARIOS', Tipo: 'LIBRE', 'Script / Pregunta': 'Cuentame algo mas sobre tu viaje.', Opciones: '', Mostrar_Si: '', Obligatorio: '' },
       { Fase: '2. Verificacion', Orden: 3, Question_ID: 'Q_HORARIO_PREFERIDO', Tipo: 'CAMPO_PASIVO', 'Script / Pregunta': 'Horario preferido (solo llenar si el cliente lo menciona).', Opciones: '', Mostrar_Si: '', Obligatorio: '' },
       { Fase: '2. Verificacion', Orden: 4, Question_ID: 'EVAL_TRATO', Tipo: 'EVALUACION_AGENTE', 'Script / Pregunta': '¿Como reacciono el cliente a la explicacion?', Opciones: '🟢 Conforme, 🟠 Con dudas, 🔴 Molesto', Mostrar_Si: '', Obligatorio: '' },

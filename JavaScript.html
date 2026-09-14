@@ -1269,9 +1269,11 @@
     panel.appendChild(progresoTexto);
   }
 
-  // "Punto critico" = fila con Obligatorio = SI, actualmente visible
-  // (respeta Mostrar_Si/Servicios), de un tipo que en verdad se contesta.
-  // El Titulo_Corto sale de Notes_USP cuando existe; si no, texto truncado.
+  // "Punto critico" = fila con Critico = SI (columna separada de Obligatorio;
+  // Critico marca los puntos de cumplimiento real, no todo lo que bloquea el
+  // avance), actualmente visible (respeta Mostrar_Si/Servicios), de un tipo
+  // que en verdad se contesta. El Titulo_Corto sale de Notes_USP cuando
+  // existe; si no, texto truncado.
   function renderPuntosCriticosEnPanel(panel) {
     const titulo = document.createElement('div');
     titulo.className = 'rp-title';
@@ -1281,7 +1283,7 @@
 
     const criticos = todasLasFilasVisibles().filter(f => {
       const cat = tipoCategoria(f.Tipo);
-      return esVerdadero(f.Obligatorio) && (cat === 'PREGUNTA' || cat === 'EVALUACION_AGENTE' || cat === 'LIBRE');
+      return esVerdadero(f.Critico) && (cat === 'PREGUNTA' || cat === 'EVALUACION_AGENTE' || cat === 'LIBRE');
     });
 
     if (!criticos.length) {
