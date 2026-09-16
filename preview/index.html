@@ -76,14 +76,20 @@
 
   <div class="aviso-preview">VISOR LOCAL -- datos de prueba, no es el Sheet real</div>
 
-  <script src="mock-data.js"></script>
   <script>
-    // Carga Stylesheet.html y JavaScript.html TAL COMO ESTAN en la raiz del
-    // repo (una sola fuente de verdad -- nada se duplica ni se copia).
-    async function extraerContenido(url, etiqueta) {
-      const resp = await fetch(url);
+    // Todo se lee con cache:'no-store' -- sin esto, el navegador puede seguir
+    // sirviendo una version vieja de mock-data.js/Stylesheet.html/JavaScript.html
+    // aunque el archivo en disco ya cambio, y el visor parece "no reflejar" un
+    // cambio que en realidad si esta en el repo (recargar la pestaña no basta
+    // si el navegador cree que el recurso todavia es valido).
+    async function leerSinCache(url) {
+      const resp = await fetch(url, { cache: 'no-store' });
       if (!resp.ok) throw new Error('No se pudo leer ' + url + ' (¿estas sirviendo por http:// y no abriendo el archivo directo?)');
-      const texto = await resp.text();
+      return resp.text();
+    }
+
+    async function extraerContenido(url, etiqueta) {
+      const texto = await leerSinCache(url);
       const regex = new RegExp('<' + etiqueta + '[^>]*>([\\s\\S]*)</' + etiqueta + '>');
       const m = texto.match(regex);
       if (!m) throw new Error(etiqueta + ' no encontrado en ' + url);
@@ -92,6 +98,11 @@
 
     (async () => {
       try {
+        const mock = await leerSinCache('mock-data.js');
+        const scriptMock = document.createElement('script');
+        scriptMock.textContent = mock;
+        document.body.appendChild(scriptMock);
+
         const css = await extraerContenido('../Stylesheet.html', 'style');
         document.getElementById('estilos-reales').textContent = css;
 
