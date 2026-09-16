@@ -29,7 +29,13 @@ const MOCK_DB = {
       { Incidente_ID: 'INC-DEMO-02', Descripcion: 'Cliente exige hablar con supervisor', Categoria: 'Escalacion', Como_Tratarlo: 'Transferir o agendar callback.', Color_Sugerido: '🔴', Requiere_Seguimiento: 'Si', Notifica_A: 'Supervision' }
     ],
 
-    hoteles: [],
+    // Catalogo_Hoteles: Code.gs ya filtra por Activo = SI antes de mandarlo
+    // al cliente. Bullet_Points_Apoyo viene separado por " · " en una sola
+    // celda -- el cliente lo parte en <li>.
+    hoteles: [
+      { Nombre: 'Hotel Demo Palace', Activo: 'SI', Bullet_Points_Apoyo: 'Alberca de olas cerrada en temporada baja · El shuttle al aeropuerto sale cada hora · Wifi gratis solo en areas comunes' },
+      { Nombre: 'Hotel Demo Inactivo', Activo: 'NO', Bullet_Points_Apoyo: 'Este hotel no deberia aparecer nunca -- Activo = NO.' }
+    ],
     servicios: [
       { Servicio_ID: 'DEMO_SVC', Nombre: 'Transporte Demo', Precio: '$99', 'Duracion/Detalle': 'Ida y vuelta', Activo: 'SI', Notas: '' }
     ],
@@ -54,14 +60,19 @@ const MOCK_DB = {
     // Preguntas_[Programa]: guion sintetico, 4 fases + Checkpoint + Cierre.
     // Tipo ya viene en el conjunto cerrado de 8 (post-migracion real).
     preguntas: [
-      // Estas dos filas traen columnas "(EN)" a proposito, para probar que
-      // el toggle de idioma solo traduce el guion cuando el Sheet lo trae --
-      // el resto de las filas de abajo NO tienen columna EN y deben seguir
-      // viendose en español aunque el toggle este en EN (ese es el fallback).
-      { Fase: '1. Apertura', Orden: 1, Question_ID: '', Tipo: 'SCRIPT', 'Script / Pregunta': 'Hola, soy [Tu nombre]. ¿Hablo con {{Client Name}}?', 'Script / Pregunta (EN)': 'Hello, this is [Your Name]. Am I speaking with {{Client Name}}?', Opciones: '', Mostrar_Si: '', Obligatorio: '' },
-      { Fase: '1. Apertura', Orden: 2, Question_ID: 'Q_TIEMPO_OK', Tipo: 'PREGUNTA', 'Script / Pregunta': '¿Es buen momento para hablar?', 'Script / Pregunta (EN)': 'Is this a good time to talk?', Opciones: 'Si, No', 'Opciones (EN)': 'Yes, No', Mostrar_Si: '', Obligatorio: 'SI', Critico: '' },
+      // Estas dos filas traen columnas Script_EN / Opciones_EN a proposito
+      // (asi se llaman de verdad en Preguntas_USP, no "<Columna> (EN)"),
+      // para probar que el toggle de idioma solo traduce el guion cuando
+      // el Sheet lo trae -- el resto de las filas de abajo NO tienen
+      // columna EN y deben seguir viendose en español aunque el toggle
+      // este en EN (ese es el fallback).
+      { Fase: '1. Apertura', Orden: 1, Question_ID: '', Tipo: 'SCRIPT', 'Script / Pregunta': 'Hola, soy [Tu nombre]. ¿Hablo con {{Client Name}}?', Script_EN: 'Hello, this is [Your Name]. Am I speaking with {{Client Name}}?', Opciones: '', Mostrar_Si: '', Obligatorio: '' },
+      { Fase: '1. Apertura', Orden: 2, Question_ID: 'Q_TIEMPO_OK', Tipo: 'PREGUNTA', 'Script / Pregunta': '¿Es buen momento para hablar?', Script_EN: 'Is this a good time to talk?', Opciones: 'Si, No', Opciones_EN: 'Yes, No', Mostrar_Si: '', Obligatorio: 'SI', Critico: '' },
       { Fase: '1. Apertura', Orden: 3, Question_ID: '', Tipo: 'SCRIPT', 'Script / Pregunta': 'Perfecto, {{Client Name}}, gracias por tu tiempo.', Opciones: '', Mostrar_Si: 'Q_TIEMPO_OK: Si', Obligatorio: '' },
       { Fase: '1. Apertura', Orden: 4, Question_ID: 'EVAL_IDIOMA', Tipo: 'EVALUACION_CONTINUA', 'Script / Pregunta': 'Campo persistente en panel, activo desde Apertura. Verde=fluido por evidencia de la llamada (default). Naranja=duda real (acento marcado, pide repetir seguido, etc).', Opciones: 'Verde (default), Naranja', Mostrar_Si: '', Obligatorio: '' },
+      // Prueba del panel "Tips del hotel": HOTEL_NAME se captura como LIBRE
+      // (texto libre) y el panel lo busca en Catalogo_Hoteles por Nombre.
+      { Fase: '1. Apertura', Orden: 5, Question_ID: 'HOTEL_NAME', Tipo: 'LIBRE', 'Script / Pregunta': '¿En que hotel se hospedaron? (para mostrar tips de apoyo)', Opciones: '', Mostrar_Si: '', Obligatorio: '' },
 
       { Fase: '2. Verificacion', Orden: 1, Question_ID: 'Q_RELACION', Tipo: 'PREGUNTA', 'Script / Pregunta': '¿Cual es tu relacion con el socio?', Opciones: 'Amigo, Familiar directo', Mostrar_Si: '', Obligatorio: 'SI', Critico: 'SI' },
       // Obligatorio vacio + Critico SI a proposito: demuestra que son columnas
@@ -125,7 +136,11 @@ function crearRunnerMock() {
             resultado = MOCK_DB.programasActivos;
             break;
           case 'getDataInicial':
-            resultado = MOCK_DB.dataInicial;
+            // Code.gs filtra Catalogo_Hoteles por Activo = SI antes de mandarlo --
+            // el mock imita eso para que "Hotel Demo Inactivo" nunca llegue al cliente.
+            resultado = Object.assign({}, MOCK_DB.dataInicial, {
+              hoteles: MOCK_DB.dataInicial.hoteles.filter(h => (h.Activo || '').toString().trim().toUpperCase() === 'SI')
+            });
             break;
           case 'evaluarReglas': {
             const [, respuestas] = args;

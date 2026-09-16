@@ -84,7 +84,8 @@
       tituloPuntosCriticos: 'Puntos críticos', sinPuntosCriticos: 'Sin puntos críticos definidos en el Sheet.',
       btnFinalizarLlamada: 'Finalizar llamada', tituloNotas: 'Notas de la llamada',
       btnCopiar: 'Copiar al portapapeles', copiado: '¡Copiado!', sinNotasCategoria: '(Sin notas para esta categoría)',
-      guardando: 'Guardando...'
+      guardando: 'Guardando...',
+      tituloTipsHotel: 'Tips del hotel', sinTipsHotel: 'Sin tips disponibles para este hotel.'
     },
     EN: {
       labelAgente: 'Agent', labelPrograma: 'Program', labelContrato: 'Contract', labelCliente: 'Client',
@@ -120,7 +121,8 @@
       tituloPuntosCriticos: 'Critical points', sinPuntosCriticos: 'No critical points defined in the Sheet.',
       btnFinalizarLlamada: 'Finish call', tituloNotas: 'Call notes',
       btnCopiar: 'Copy to clipboard', copiado: 'Copied!', sinNotasCategoria: '(No notes for this category)',
-      guardando: 'Saving...'
+      guardando: 'Saving...',
+      tituloTipsHotel: 'Hotel tips', sinTipsHotel: 'No tips available for this hotel.'
     }
   };
 
@@ -130,10 +132,15 @@
   }
 
   // Ver comentario grande arriba: NUNCA traduce nada por su cuenta, solo lee
-  // una columna paralela "<Columna> (EN)" si el Sheet la trae con contenido.
+  // una columna paralela con el contenido en EN si el Sheet la trae con
+  // contenido. En Preguntas_USP esas columnas se llaman Script_EN y
+  // Opciones_EN (no "<Columna> (EN)"); otras columnas siguen ese patron
+  // generico por si el Sheet lo usa en el futuro.
+  const COLUMNAS_EN = { 'Script / Pregunta': 'Script_EN', 'Opciones': 'Opciones_EN' };
   function textoFila(fila, columna) {
     if (state.idioma === 'EN') {
-      const enValor = fila[columna + ' (EN)'];
+      const columnaEN = COLUMNAS_EN[columna] || (columna + ' (EN)');
+      const enValor = fila[columnaEN];
       if (enValor !== undefined && enValor.toString().trim() !== '') return enValor;
     }
     return fila[columna] || '';
@@ -1246,6 +1253,7 @@
     renderBotonFinalizarEnPanel(panel);
     renderEvaluacionContinuaEnPanel(panel);
     renderResumenEnPanel(panel);
+    renderTipsHotelEnPanel(panel);
   }
 
   function renderProgresoEnPanel(panel) {
@@ -1400,6 +1408,42 @@
       item.textContent = (flag.tipo === 'green' ? '🟢 ' : '🔴 ') + flag.texto;
       panel.appendChild(item);
     });
+  }
+
+  // Bullet points de apoyo del hotel activo en la llamada -- sale de
+  // Catalogo_Hoteles (ya filtrado por Activo = SI desde Code.gs), buscado
+  // por el nombre que el agente capturo en HOTEL_NAME durante Apertura.
+  // Nunca se inventa contenido aqui: si falta el nombre o no hay match, se
+  // muestra un estado vacio explicito en vez de dejar el espacio en blanco.
+  function renderTipsHotelEnPanel(panel) {
+    const titulo = document.createElement('div');
+    titulo.className = 'rp-title';
+    titulo.style.marginTop = '18px';
+    titulo.textContent = t('tituloTipsHotel');
+    panel.appendChild(titulo);
+
+    const nombreHotel = obtenerVariable('HOTEL_NAME');
+    const hotel = nombreHotel
+      ? (state.data.hoteles || []).find(h => (h.Nombre || '').toString().trim().toUpperCase() === nombreHotel.toString().trim().toUpperCase())
+      : null;
+    const bullets = hotel ? (hotel.Bullet_Points_Apoyo || '').toString().split(' · ').map(s => s.trim()).filter(Boolean) : [];
+
+    if (!hotel || !bullets.length) {
+      const vacio = document.createElement('div');
+      vacio.className = 'empty-state';
+      vacio.textContent = t('sinTipsHotel');
+      panel.appendChild(vacio);
+      return;
+    }
+
+    const lista = document.createElement('ul');
+    lista.className = 'hotel-tips-list';
+    bullets.forEach(texto => {
+      const li = document.createElement('li');
+      li.textContent = texto;
+      lista.appendChild(li);
+    });
+    panel.appendChild(lista);
   }
 
   function calcularDuracionMinutos() {
