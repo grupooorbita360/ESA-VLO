@@ -70,9 +70,10 @@ const MOCK_DB = {
       { Fase: '1. Apertura', Orden: 2, Question_ID: 'Q_TIEMPO_OK', Tipo: 'PREGUNTA', 'Script / Pregunta': '¿Es buen momento para hablar?', Script_EN: 'Is this a good time to talk?', Opciones: 'Si, No', Opciones_EN: 'Yes, No', Mostrar_Si: '', Obligatorio: 'SI', Critico: '' },
       { Fase: '1. Apertura', Orden: 3, Question_ID: '', Tipo: 'SCRIPT', 'Script / Pregunta': 'Perfecto, {{Client Name}}, gracias por tu tiempo.', Opciones: '', Mostrar_Si: 'Q_TIEMPO_OK: Si', Obligatorio: '' },
       { Fase: '1. Apertura', Orden: 4, Question_ID: 'EVAL_IDIOMA', Tipo: 'EVALUACION_CONTINUA', 'Script / Pregunta': 'Campo persistente en panel, activo desde Apertura. Verde=fluido por evidencia de la llamada (default). Naranja=duda real (acento marcado, pide repetir seguido, etc).', Opciones: 'Verde (default), Naranja', Mostrar_Si: '', Obligatorio: '' },
-      // Prueba del panel "Tips del hotel": HOTEL_NAME se captura como LIBRE
-      // (texto libre) y el panel lo busca en Catalogo_Hoteles por Nombre.
-      { Fase: '1. Apertura', Orden: 5, Question_ID: 'HOTEL_NAME', Tipo: 'LIBRE', 'Script / Pregunta': '¿En que hotel se hospedaron? (para mostrar tips de apoyo)', Opciones: '', Mostrar_Si: '', Obligatorio: '' },
+      // HOTEL_NAME ya NO es una pregunta del guion -- se captura como campo
+      // opcional en la pantalla inicial (junto a Agente/Programa/Contrato/
+      // Cliente, ver iniciar() en JavaScript.html) y llega al panel "Tips
+      // del hotel" via state.variables, no via una fila de Preguntas_USP.
 
       { Fase: '2. Verificacion', Orden: 1, Question_ID: 'Q_RELACION', Tipo: 'PREGUNTA', 'Script / Pregunta': '¿Cual es tu relacion con el socio?', Opciones: 'Amigo, Familiar directo', Mostrar_Si: '', Obligatorio: 'SI', Critico: 'SI' },
       // Obligatorio vacio + Critico SI a proposito: demuestra que son columnas

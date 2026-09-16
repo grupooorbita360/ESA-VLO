@@ -51,9 +51,9 @@
   // ============================================================
   const TEXTOS = {
     ES: {
-      labelAgente: 'Agente', labelPrograma: 'Programa', labelContrato: 'Contrato', labelCliente: 'Cliente',
+      labelAgente: 'Agente', labelPrograma: 'Programa', labelContrato: 'Contrato', labelCliente: 'Cliente', labelHotel: 'Hotel',
       btnIniciar: 'Iniciar', btnReiniciar: 'Reiniciar', btnBuscar: 'Buscar', btnQuitar: 'Quitar',
-      placeholderContrato: 'Numero de contrato', placeholderCliente: 'Nombre del cliente',
+      placeholderContrato: 'Numero de contrato', placeholderCliente: 'Nombre del cliente', placeholderHotel: 'Opcional -- si se sabe',
       placeholderContratoTopbar: 'Escribe o busca...', placeholderCampoPasivo: 'Se llena solo si surge...', placeholderOtro: 'Especifica...',
       cargando: 'Cargando...', sinProgramas: 'Sin programas activos',
       alertaSeleccionaAgentePrograma: 'Selecciona agente y programa.',
@@ -88,9 +88,9 @@
       tituloTipsHotel: 'Tips del hotel', sinTipsHotel: 'Sin tips disponibles para este hotel.'
     },
     EN: {
-      labelAgente: 'Agent', labelPrograma: 'Program', labelContrato: 'Contract', labelCliente: 'Client',
+      labelAgente: 'Agent', labelPrograma: 'Program', labelContrato: 'Contract', labelCliente: 'Client', labelHotel: 'Hotel',
       btnIniciar: 'Start', btnReiniciar: 'Restart', btnBuscar: 'Search', btnQuitar: 'Remove',
-      placeholderContrato: 'Contract number', placeholderCliente: 'Client name',
+      placeholderContrato: 'Contract number', placeholderCliente: 'Client name', placeholderHotel: 'Optional -- if known',
       placeholderContratoTopbar: 'Type or search...', placeholderCampoPasivo: 'Only fill in if it comes up...', placeholderOtro: 'Specify...',
       cargando: 'Loading...', sinProgramas: 'No active programs',
       alertaSeleccionaAgentePrograma: 'Select agent and program.',
@@ -220,6 +220,7 @@
     const programa = document.getElementById('sel-programa').value;
     const contrato = document.getElementById('lock-contrato').value.trim();
     const cliente = document.getElementById('lock-cliente').value.trim();
+    const hotel = document.getElementById('lock-hotel').value.trim(); // unico campo opcional de esta pantalla
     if (!agente || !programa) { alert(t('alertaSeleccionaAgentePrograma')); return; }
     if (!contrato || !cliente) { alert(t('alertaFaltaContratoCliente')); return; }
     if (!state.data || !state.data.config || state.data.config['Product/Program'] !== programa) {
@@ -232,6 +233,7 @@
     state.cliente = cliente;
     state.variables['CONTRATO'] = contrato;
     state.variables['CLIENT_NAME'] = cliente;
+    if (hotel) state.variables['HOTEL_NAME'] = hotel;
     state.startTime = Date.now();
     document.getElementById('tb-agente').textContent = agente;
     document.getElementById('tb-programa').textContent = programa;
@@ -1412,9 +1414,10 @@
 
   // Bullet points de apoyo del hotel activo en la llamada -- sale de
   // Catalogo_Hoteles (ya filtrado por Activo = SI desde Code.gs), buscado
-  // por el nombre que el agente capturo en HOTEL_NAME durante Apertura.
-  // Nunca se inventa contenido aqui: si falta el nombre o no hay match, se
-  // muestra un estado vacio explicito en vez de dejar el espacio en blanco.
+  // por el nombre que el agente capturo en el campo Hotel de la pantalla
+  // inicial (unico campo opcional ahi -- ver iniciar()). Nunca se inventa
+  // contenido aqui: si falta el nombre o no hay match, se muestra un
+  // estado vacio explicito en vez de dejar el espacio en blanco.
   function renderTipsHotelEnPanel(panel) {
     const titulo = document.createElement('div');
     titulo.className = 'rp-title';
