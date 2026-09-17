@@ -53,7 +53,7 @@
     ES: {
       labelAgente: 'Agente', labelPrograma: 'Programa', labelContrato: 'Contrato', labelCliente: 'Cliente', labelHotel: 'Hotel',
       btnIniciar: 'Iniciar', btnReiniciar: 'Reiniciar', btnBuscar: 'Buscar', btnQuitar: 'Quitar',
-      placeholderContrato: 'Numero de contrato', placeholderCliente: 'Nombre del cliente', placeholderHotel: 'Opcional -- si se sabe',
+      placeholderContrato: 'Numero de contrato', placeholderCliente: 'Nombre del cliente', placeholderHotel: 'Codigo del hotel (opcional, ej. SR1)',
       placeholderContratoTopbar: 'Escribe o busca...', placeholderCampoPasivo: 'Se llena solo si surge...', placeholderOtro: 'Especifica...',
       cargando: 'Cargando...', sinProgramas: 'Sin programas activos',
       alertaSeleccionaAgentePrograma: 'Selecciona agente y programa.',
@@ -85,12 +85,12 @@
       btnFinalizarLlamada: 'Finalizar llamada', tituloNotas: 'Notas de la llamada',
       btnCopiar: 'Copiar al portapapeles', copiado: '¡Copiado!', sinNotasCategoria: '(Sin notas para esta categoría)',
       guardando: 'Guardando...',
-      tituloTipsHotel: 'Tips del hotel', sinTipsHotel: 'Sin tips disponibles para este hotel.'
+      tituloTipsHotel: 'Tips del hotel', tituloTipsHotelDe: 'Tips de {hotel}', sinTipsHotel: 'Sin tips disponibles para este hotel.'
     },
     EN: {
       labelAgente: 'Agent', labelPrograma: 'Program', labelContrato: 'Contract', labelCliente: 'Client', labelHotel: 'Hotel',
       btnIniciar: 'Start', btnReiniciar: 'Restart', btnBuscar: 'Search', btnQuitar: 'Remove',
-      placeholderContrato: 'Contract number', placeholderCliente: 'Client name', placeholderHotel: 'Optional -- if known',
+      placeholderContrato: 'Contract number', placeholderCliente: 'Client name', placeholderHotel: 'Hotel code (optional, e.g. SR1)',
       placeholderContratoTopbar: 'Type or search...', placeholderCampoPasivo: 'Only fill in if it comes up...', placeholderOtro: 'Specify...',
       cargando: 'Loading...', sinProgramas: 'No active programs',
       alertaSeleccionaAgentePrograma: 'Select agent and program.',
@@ -122,7 +122,7 @@
       btnFinalizarLlamada: 'Finish call', tituloNotas: 'Call notes',
       btnCopiar: 'Copy to clipboard', copiado: 'Copied!', sinNotasCategoria: '(No notes for this category)',
       guardando: 'Saving...',
-      tituloTipsHotel: 'Hotel tips', sinTipsHotel: 'No tips available for this hotel.'
+      tituloTipsHotel: 'Hotel tips', tituloTipsHotelDe: 'Tips for {hotel}', sinTipsHotel: 'No tips available for this hotel.'
     }
   };
 
@@ -1414,22 +1414,25 @@
 
   // Bullet points de apoyo del hotel activo en la llamada -- sale de
   // Catalogo_Hoteles (ya filtrado por Activo = SI desde Code.gs), buscado
-  // por el nombre que el agente capturo en el campo Hotel de la pantalla
-  // inicial (unico campo opcional ahi -- ver iniciar()). Nunca se inventa
-  // contenido aqui: si falta el nombre o no hay match, se muestra un
-  // estado vacio explicito en vez de dejar el espacio en blanco.
+  // por el CODIGO que el agente capturo en el campo Hotel de la pantalla
+  // inicial (unico campo opcional ahi -- ver iniciar()). El agente escribe
+  // un codigo corto (ej. "SR1"), no el nombre completo -- por eso el match
+  // es contra Hotel_ID, no contra Nombre; Nombre solo se usa para mostrar
+  // ("Tips de Secrets Royal Beach"). Nunca se inventa contenido aqui: si
+  // falta el codigo o no hay match, se muestra un estado vacio explicito
+  // en vez de dejar el espacio en blanco.
   function renderTipsHotelEnPanel(panel) {
+    const codigoHotel = obtenerVariable('HOTEL_NAME');
+    const hotel = codigoHotel
+      ? (state.data.hoteles || []).find(h => (h.Hotel_ID || '').toString().trim().toUpperCase() === codigoHotel.toString().trim().toUpperCase())
+      : null;
+    const bullets = hotel ? (hotel.Bullet_Points_Apoyo || '').toString().split(' · ').map(s => s.trim()).filter(Boolean) : [];
+
     const titulo = document.createElement('div');
     titulo.className = 'rp-title';
     titulo.style.marginTop = '18px';
-    titulo.textContent = t('tituloTipsHotel');
+    titulo.textContent = (hotel && hotel.Nombre) ? t('tituloTipsHotelDe').replace('{hotel}', hotel.Nombre) : t('tituloTipsHotel');
     panel.appendChild(titulo);
-
-    const nombreHotel = obtenerVariable('HOTEL_NAME');
-    const hotel = nombreHotel
-      ? (state.data.hoteles || []).find(h => (h.Nombre || '').toString().trim().toUpperCase() === nombreHotel.toString().trim().toUpperCase())
-      : null;
-    const bullets = hotel ? (hotel.Bullet_Points_Apoyo || '').toString().split(' · ').map(s => s.trim()).filter(Boolean) : [];
 
     if (!hotel || !bullets.length) {
       const vacio = document.createElement('div');

@@ -30,11 +30,14 @@ const MOCK_DB = {
     ],
 
     // Catalogo_Hoteles: Code.gs ya filtra por Activo = SI antes de mandarlo
-    // al cliente. Bullet_Points_Apoyo viene separado por " · " en una sola
-    // celda -- el cliente lo parte en <li>.
+    // al cliente. El match del campo Hotel es contra Hotel_ID (el agente
+    // escribe un codigo corto, no el nombre completo) -- Nombre solo se usa
+    // para mostrar el titulo del panel ("Tips de Secrets Royal Beach").
+    // Bullet_Points_Apoyo viene separado por " · " en una sola celda -- el
+    // cliente lo parte en <li>.
     hoteles: [
-      { Nombre: 'Hotel Demo Palace', Activo: 'SI', Bullet_Points_Apoyo: 'Alberca de olas cerrada en temporada baja · El shuttle al aeropuerto sale cada hora · Wifi gratis solo en areas comunes' },
-      { Nombre: 'Hotel Demo Inactivo', Activo: 'NO', Bullet_Points_Apoyo: 'Este hotel no deberia aparecer nunca -- Activo = NO.' }
+      { Hotel_ID: 'SR1', Nombre: 'Secrets Royal Beach', Activo: 'SI', Bullet_Points_Apoyo: 'Alberca de olas cerrada en temporada baja · El shuttle al aeropuerto sale cada hora · Wifi gratis solo en areas comunes' },
+      { Hotel_ID: 'SR2', Nombre: 'Hotel Demo Inactivo', Activo: 'NO', Bullet_Points_Apoyo: 'Este hotel no deberia aparecer nunca -- Activo = NO.' }
     ],
     servicios: [
       { Servicio_ID: 'DEMO_SVC', Nombre: 'Transporte Demo', Precio: '$99', 'Duracion/Detalle': 'Ida y vuelta', Activo: 'SI', Notas: '' }

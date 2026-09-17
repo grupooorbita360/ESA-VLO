@@ -72,17 +72,21 @@ function getDataInicial(programa) {
   try {
     const config = sheetToObjects('CONFIG_PRODUCTS').find(p => p['Product/Program'] === programa);
     if (!config) return { error: 'Programa no encontrado en CONFIG_PRODUCTS: ' + programa };
+    const suf = sufijo(programa);
 
-    const preguntas = sheetToObjects('Preguntas_' + sufijo(programa));
-    const reglas = sheetToObjects('Reglas_' + sufijo(programa));
+    // Preguntas_[Programa] sigue siendo una pestaña por programa. Reglas,
+    // Servicios, Politicas, Campos_Variables y Notes ya son compartidas
+    // (una sola pestaña para todos los programas) y se filtran por Program.
+    const preguntas = sheetToObjects('Preguntas_' + suf);
+    const reglas = sheetToObjects('Reglas').filter(r => r.Program === suf);
     const condiciones = sheetToObjects('Condiciones_Reglas').filter(c => {
       const r = reglas.find(rg => rg.Rule_ID === c.Rule_ID);
       return !!r;
     });
-    const servicios = sheetToObjects('Servicios_' + sufijo(programa));
-    const politicas = sheetToObjects('Politicas_' + sufijo(programa));
-    const camposVariables = sheetToObjects('Campos_Variables_' + sufijo(programa));
-    const notes = sheetToObjects('Notes_' + sufijo(programa));
+    const servicios = sheetToObjects('Servicios').filter(s => s.Program === suf);
+    const politicas = sheetToObjects('Politicas').filter(p => p.Program === suf);
+    const camposVariables = sheetToObjects('Campos_Variables').filter(c => c.Program === suf);
+    const notes = sheetToObjects('Notes').filter(n => n.Program === suf);
 
     const agentes = sheetToObjects('LISTA_AGENTES').filter(a => esVerdadero(a.Activo)).map(a => a.Nombre);
     const hoteles = sheetToObjects('Catalogo_Hoteles').filter(h => esVerdadero(h.Activo));
@@ -98,11 +102,14 @@ function getDataInicial(programa) {
   }
 }
 
+// El sufijo (ej. "USP", "FB") sale de CONFIG_PRODUCTS.Sufijo -- nunca de un
+// mapeo fijo en codigo, para que un programa nuevo solo necesite una fila
+// nueva en el Sheet. Si esa columna faltara o viniera vacia para una fila,
+// cleanKey(programa) es el ultimo respaldo.
 function sufijo(programa) {
-  // "USP Referral" -> "USP" / "Fly & Buy" -> "FB"
-  // Ajusta este mapeo si el nombre en CONFIG_PRODUCTS no calza directo con el sufijo de pestaña.
-  const mapa = { 'USP Referral': 'USP', 'Fly & Buy': 'FB' };
-  return mapa[programa] || cleanKey(programa);
+  const config = sheetToObjects('CONFIG_PRODUCTS').find(p => p['Product/Program'] === programa);
+  const valor = config && config.Sufijo ? config.Sufijo.toString().trim() : '';
+  return valor || cleanKey(programa);
 }
 
 // ---- Motor de reglas ----
@@ -149,7 +156,8 @@ function condicionesDeRegla(regla, condicionesAdicionales) {
  * ordenada por Priority descendente -- la primera es la que manda.
  */
 function evaluarReglas(programa, respuestas) {
-  const reglas = sheetToObjects('Reglas_' + sufijo(programa));
+  const suf = sufijo(programa);
+  const reglas = sheetToObjects('Reglas').filter(r => r.Program === suf);
   const condiciones = sheetToObjects('Condiciones_Reglas');
 
   const disparadas = reglas.filter(regla => {
