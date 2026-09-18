@@ -37,17 +37,28 @@
         <button class="btn-mini" id="btn-idioma-en-lock" onclick="cambiarIdioma('EN')">EN</button>
       </div>
       <h2>Verification Copilot (visor local)</h2>
-      <label data-i18n="labelAgente">Agente</label>
-      <select id="sel-agente"><option value="">Cargando...</option></select>
-      <label data-i18n="labelPrograma">Programa</label>
-      <select id="sel-programa"><option value="">Cargando...</option></select>
-      <label data-i18n="labelContrato">Contrato</label>
-      <input id="lock-contrato" type="text" data-i18n-placeholder="placeholderContrato" value="DEMO-0001">
-      <label data-i18n="labelCliente">Cliente</label>
-      <input id="lock-cliente" type="text" data-i18n-placeholder="placeholderCliente" value="Cliente de Prueba">
-      <label data-i18n="labelHotel">Hotel</label>
-      <input id="lock-hotel" type="text" data-i18n-placeholder="placeholderHotel">
-      <button id="btn-iniciar" onclick="iniciar()" data-i18n="btnIniciar">Iniciar</button>
+
+      <div class="lock-paso activo" id="lock-paso-1">
+        <label data-i18n="labelAgente">Agente</label>
+        <select id="sel-agente"><option value="">Cargando...</option></select>
+        <button onclick="avanzarPaso1()" data-i18n="btnEntrar">Entrar</button>
+      </div>
+
+      <div class="lock-paso" id="lock-paso-2">
+        <label data-i18n="labelPrograma">Programa</label>
+        <select id="sel-programa"><option value="">Cargando...</option></select>
+        <button onclick="avanzarPaso2()" data-i18n="btnContinuar">Continuar</button>
+      </div>
+
+      <div class="lock-paso" id="lock-paso-3">
+        <label data-i18n="labelContrato">Contrato</label>
+        <input id="lock-contrato" type="text" data-i18n-placeholder="placeholderContrato" value="DEMO-0001">
+        <label data-i18n="labelCliente">Cliente</label>
+        <input id="lock-cliente" type="text" data-i18n-placeholder="placeholderCliente" value="Cliente de Prueba">
+        <label data-i18n="labelHotel">Hotel</label>
+        <input id="lock-hotel" type="text" data-i18n-placeholder="placeholderHotel">
+        <button id="btn-iniciar" onclick="iniciar()" data-i18n="btnEmpezarLlamada">Empezar llamada</button>
+      </div>
     </div>
   </div>
 

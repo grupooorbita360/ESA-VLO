@@ -7,8 +7,10 @@
 </head>
 <body>
 
-  <!-- Pantalla de inicio: agente + programa + contrato + cliente (obligatorios, el VLO no
-       arranca sin esto) + hotel (opcional, solo alimenta el panel "Tips del hotel") -->
+  <!-- Pantalla de inicio en 3 pasos: Agente -> Programa -> Datos del caso.
+       Agente/Programa/Contrato/Cliente son obligatorios (cada uno bloquea
+       el avance a su propio paso); Hotel es el unico campo opcional y solo
+       alimenta el panel "Tips del hotel". -->
   <div id="lock-screen" class="lock-screen">
     <div class="lock-card">
       <div class="lock-idioma">
@@ -16,17 +18,28 @@
         <button class="btn-mini" id="btn-idioma-en-lock" onclick="cambiarIdioma('EN')">EN</button>
       </div>
       <h2>Verification Copilot</h2>
-      <label data-i18n="labelAgente">Agente</label>
-      <select id="sel-agente"><option value="">Cargando...</option></select>
-      <label data-i18n="labelPrograma">Programa</label>
-      <select id="sel-programa"><option value="">Cargando...</option></select>
-      <label data-i18n="labelContrato">Contrato</label>
-      <input id="lock-contrato" type="text" data-i18n-placeholder="placeholderContrato">
-      <label data-i18n="labelCliente">Cliente</label>
-      <input id="lock-cliente" type="text" data-i18n-placeholder="placeholderCliente">
-      <label data-i18n="labelHotel">Hotel</label>
-      <input id="lock-hotel" type="text" data-i18n-placeholder="placeholderHotel">
-      <button id="btn-iniciar" onclick="iniciar()" data-i18n="btnIniciar">Iniciar</button>
+
+      <div class="lock-paso activo" id="lock-paso-1">
+        <label data-i18n="labelAgente">Agente</label>
+        <select id="sel-agente"><option value="">Cargando...</option></select>
+        <button onclick="avanzarPaso1()" data-i18n="btnEntrar">Entrar</button>
+      </div>
+
+      <div class="lock-paso" id="lock-paso-2">
+        <label data-i18n="labelPrograma">Programa</label>
+        <select id="sel-programa"><option value="">Cargando...</option></select>
+        <button onclick="avanzarPaso2()" data-i18n="btnContinuar">Continuar</button>
+      </div>
+
+      <div class="lock-paso" id="lock-paso-3">
+        <label data-i18n="labelContrato">Contrato</label>
+        <input id="lock-contrato" type="text" data-i18n-placeholder="placeholderContrato">
+        <label data-i18n="labelCliente">Cliente</label>
+        <input id="lock-cliente" type="text" data-i18n-placeholder="placeholderCliente">
+        <label data-i18n="labelHotel">Hotel</label>
+        <input id="lock-hotel" type="text" data-i18n-placeholder="placeholderHotel">
+        <button id="btn-iniciar" onclick="iniciar()" data-i18n="btnEmpezarLlamada">Empezar llamada</button>
+      </div>
     </div>
   </div>
 

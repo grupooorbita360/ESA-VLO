@@ -139,6 +139,9 @@ function crearRunnerMock() {
           case 'getProgramasActivos':
             resultado = MOCK_DB.programasActivos;
             break;
+          case 'getAgentesActivos':
+            resultado = MOCK_DB.dataInicial.agentes;
+            break;
           case 'getDataInicial':
             // Code.gs filtra Catalogo_Hoteles por Activo = SI antes de mandarlo --
             // el mock imita eso para que "Hotel Demo Inactivo" nunca llegue al cliente.

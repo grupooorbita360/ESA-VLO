@@ -52,11 +52,12 @@
   const TEXTOS = {
     ES: {
       labelAgente: 'Agente', labelPrograma: 'Programa', labelContrato: 'Contrato', labelCliente: 'Cliente', labelHotel: 'Hotel',
-      btnIniciar: 'Iniciar', btnReiniciar: 'Reiniciar', btnBuscar: 'Buscar', btnQuitar: 'Quitar',
+      btnEntrar: 'Entrar', btnContinuar: 'Continuar', btnEmpezarLlamada: 'Empezar llamada',
+      btnReiniciar: 'Reiniciar', btnBuscar: 'Buscar', btnQuitar: 'Quitar',
       placeholderContrato: 'Numero de contrato', placeholderCliente: 'Nombre del cliente', placeholderHotel: 'Codigo del hotel (opcional, ej. SR1)',
       placeholderContratoTopbar: 'Escribe o busca...', placeholderCampoPasivo: 'Se llena solo si surge...', placeholderOtro: 'Especifica...',
       cargando: 'Cargando...', sinProgramas: 'Sin programas activos',
-      alertaSeleccionaAgentePrograma: 'Selecciona agente y programa.',
+      alertaSeleccionaAgente: 'Selecciona un agente.', alertaSeleccionaPrograma: 'Selecciona un programa.',
       alertaFaltaContratoCliente: 'Escribe el contrato y el nombre del cliente antes de iniciar -- el VLO no arranca sin esto.',
       alertaCargandoPrograma: 'Los datos del programa todavía están cargando, intenta de nuevo en un momento.',
       confirmReiniciar: '¿Reiniciar la llamada actual? Se perderá lo que no se haya guardado.',
@@ -89,11 +90,12 @@
     },
     EN: {
       labelAgente: 'Agent', labelPrograma: 'Program', labelContrato: 'Contract', labelCliente: 'Client', labelHotel: 'Hotel',
-      btnIniciar: 'Start', btnReiniciar: 'Restart', btnBuscar: 'Search', btnQuitar: 'Remove',
+      btnEntrar: 'Enter', btnContinuar: 'Continue', btnEmpezarLlamada: 'Start call',
+      btnReiniciar: 'Restart', btnBuscar: 'Search', btnQuitar: 'Remove',
       placeholderContrato: 'Contract number', placeholderCliente: 'Client name', placeholderHotel: 'Hotel code (optional, e.g. SR1)',
       placeholderContratoTopbar: 'Type or search...', placeholderCampoPasivo: 'Only fill in if it comes up...', placeholderOtro: 'Specify...',
       cargando: 'Loading...', sinProgramas: 'No active programs',
-      alertaSeleccionaAgentePrograma: 'Select agent and program.',
+      alertaSeleccionaAgente: 'Select an agent.', alertaSeleccionaPrograma: 'Select a program.',
       alertaFaltaContratoCliente: 'Enter the contract number and client name before starting -- the VLO will not start without this.',
       alertaCargandoPrograma: 'Program data is still loading, try again in a moment.',
       confirmReiniciar: 'Restart the current call? Anything not saved will be lost.',
@@ -167,6 +169,7 @@
 
   document.addEventListener('DOMContentLoaded', () => {
     aplicarIdiomaEstatico();
+    google.script.run.withSuccessHandler(onAgentesCargados).withFailureHandler(onError).getAgentesActivos();
     google.script.run.withSuccessHandler(onProgramasCargados).withFailureHandler(onError).getProgramasActivos();
   });
 
@@ -175,7 +178,21 @@
     alert('Error: ' + (err && err.message ? err.message : err));
   }
 
-  // ---- Carga inicial (lock screen) ----
+  // ---- Carga inicial (lock screen, 3 pasos: Agente -> Programa -> Datos del caso) ----
+  // Agente y Programa se cargan en paralelo desde DOMContentLoaded -- ninguno
+  // depende del otro. Los datos completos del programa (getDataInicial) solo
+  // se piden al avanzar del paso 2 al 3, con el programa ya elegido.
+
+  function onAgentesCargados(agentes) {
+    const sel = document.getElementById('sel-agente');
+    sel.innerHTML = '';
+    (agentes || []).forEach(nombre => {
+      const opt = document.createElement('option');
+      opt.value = nombre;
+      opt.textContent = nombre;
+      sel.appendChild(opt);
+    });
+  }
 
   function onProgramasCargados(programas) {
     state.programasActivos = programas || [];
@@ -191,13 +208,9 @@
       opt.textContent = p['Product/Program'];
       sel.appendChild(opt);
     });
-    sel.onchange = () => cargarDatosPrograma(sel.value);
-    cargarDatosPrograma(sel.value);
   }
 
   function cargarDatosPrograma(programa) {
-    const selAgente = document.getElementById('sel-agente');
-    selAgente.innerHTML = '<option value="">' + escapeHtml(t('cargando')) + '</option>';
     google.script.run.withSuccessHandler(onDataInicial).withFailureHandler(onError).getDataInicial(programa);
   }
 
@@ -205,14 +218,27 @@
     if (data && data.error) { onError(data.error); return; }
     state.data = data;
     state.titulosCortos = construirMapaTitulosCortos();
-    const selAgente = document.getElementById('sel-agente');
-    selAgente.innerHTML = '';
-    (data.agentes || []).forEach(nombre => {
-      const opt = document.createElement('option');
-      opt.value = nombre;
-      opt.textContent = nombre;
-      selAgente.appendChild(opt);
+  }
+
+  // Muestra un solo paso del lock-screen a la vez (1=Agente, 2=Programa, 3=Datos del caso).
+  function mostrarPasoLock(numero) {
+    [1, 2, 3].forEach(n => {
+      const paso = document.getElementById('lock-paso-' + n);
+      if (paso) paso.classList.toggle('activo', n === numero);
     });
+  }
+
+  function avanzarPaso1() {
+    const agente = document.getElementById('sel-agente').value;
+    if (!agente) { alert(t('alertaSeleccionaAgente')); return; }
+    mostrarPasoLock(2);
+  }
+
+  function avanzarPaso2() {
+    const programa = document.getElementById('sel-programa').value;
+    if (!programa) { alert(t('alertaSeleccionaPrograma')); return; }
+    cargarDatosPrograma(programa);
+    mostrarPasoLock(3);
   }
 
   function iniciar() {
@@ -221,7 +247,6 @@
     const contrato = document.getElementById('lock-contrato').value.trim();
     const cliente = document.getElementById('lock-cliente').value.trim();
     const hotel = document.getElementById('lock-hotel').value.trim(); // unico campo opcional de esta pantalla
-    if (!agente || !programa) { alert(t('alertaSeleccionaAgentePrograma')); return; }
     if (!contrato || !cliente) { alert(t('alertaFaltaContratoCliente')); return; }
     if (!state.data || !state.data.config || state.data.config['Product/Program'] !== programa) {
       alert(t('alertaCargandoPrograma'));

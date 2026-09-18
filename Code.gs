@@ -68,6 +68,13 @@ function getProgramasActivos() {
   return sheetToObjects('CONFIG_PRODUCTS').filter(p => esVerdadero(p.Active));
 }
 
+// LISTA_AGENTES no depende del programa -- se carga aparte (paso 1 de la
+// pantalla inicial, antes de elegir programa) en vez de esperar a
+// getDataInicial(programa).
+function getAgentesActivos() {
+  return sheetToObjects('LISTA_AGENTES').filter(a => esVerdadero(a.Activo)).map(a => a.Nombre);
+}
+
 function getDataInicial(programa) {
   try {
     const config = sheetToObjects('CONFIG_PRODUCTS').find(p => p['Product/Program'] === programa);
@@ -88,7 +95,7 @@ function getDataInicial(programa) {
     const camposVariables = sheetToObjects('Campos_Variables').filter(c => c.Program === suf);
     const notes = sheetToObjects('Notes').filter(n => n.Program === suf);
 
-    const agentes = sheetToObjects('LISTA_AGENTES').filter(a => esVerdadero(a.Activo)).map(a => a.Nombre);
+    const agentes = getAgentesActivos();
     const hoteles = sheetToObjects('Catalogo_Hoteles').filter(h => esVerdadero(h.Activo));
     const incidentesCatalogo = sheetToObjects('Incidentes_Catalogo');
     const clasificacion = sheetToObjects('Clasificacion');
