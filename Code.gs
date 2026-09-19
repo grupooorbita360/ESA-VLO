@@ -54,6 +54,14 @@ function cleanKey(str) {
     .replace(/[^A-Z0-9]/g, '_');
 }
 
+// Compara valores de la columna Program contra el sufijo de forma tolerante
+// (espacios y mayusculas/minusculas) -- un espacio de mas en una celda del
+// Sheet no debe hacer que Reglas/Servicios/Politicas/Campos_Variables/Notes
+// se vean vacios en silencio para todo un programa.
+function mismoSufijo(valorCelda, suf) {
+  return (valorCelda || '').toString().trim().toUpperCase() === (suf || '').toString().trim().toUpperCase();
+}
+
 // Acepta los distintos formatos que puede tener una casilla "verdadera"
 // en el Sheet: checkbox real (true), o texto TRUE/SI/YES.
 function esVerdadero(valor) {
@@ -85,15 +93,15 @@ function getDataInicial(programa) {
     // Servicios, Politicas, Campos_Variables y Notes ya son compartidas
     // (una sola pestaña para todos los programas) y se filtran por Program.
     const preguntas = sheetToObjects('Preguntas_' + suf);
-    const reglas = sheetToObjects('Reglas').filter(r => r.Program === suf);
+    const reglas = sheetToObjects('Reglas').filter(r => mismoSufijo(r.Program, suf));
     const condiciones = sheetToObjects('Condiciones_Reglas').filter(c => {
       const r = reglas.find(rg => rg.Rule_ID === c.Rule_ID);
       return !!r;
     });
-    const servicios = sheetToObjects('Servicios').filter(s => s.Program === suf);
-    const politicas = sheetToObjects('Politicas').filter(p => p.Program === suf);
-    const camposVariables = sheetToObjects('Campos_Variables').filter(c => c.Program === suf);
-    const notes = sheetToObjects('Notes').filter(n => n.Program === suf);
+    const servicios = sheetToObjects('Servicios').filter(s => mismoSufijo(s.Program, suf));
+    const politicas = sheetToObjects('Politicas').filter(p => mismoSufijo(p.Program, suf));
+    const camposVariables = sheetToObjects('Campos_Variables').filter(c => mismoSufijo(c.Program, suf));
+    const notes = sheetToObjects('Notes').filter(n => mismoSufijo(n.Program, suf));
 
     const agentes = getAgentesActivos();
     const hoteles = sheetToObjects('Catalogo_Hoteles').filter(h => esVerdadero(h.Activo));
@@ -164,7 +172,7 @@ function condicionesDeRegla(regla, condicionesAdicionales) {
  */
 function evaluarReglas(programa, respuestas) {
   const suf = sufijo(programa);
-  const reglas = sheetToObjects('Reglas').filter(r => r.Program === suf);
+  const reglas = sheetToObjects('Reglas').filter(r => mismoSufijo(r.Program, suf));
   const condiciones = sheetToObjects('Condiciones_Reglas');
 
   const disparadas = reglas.filter(regla => {

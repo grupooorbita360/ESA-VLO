@@ -74,9 +74,10 @@
       sinReglaBadge: 'Sin regla disparada', razonInterna: 'Razón interna:', validacionEsa: 'Validación ESA:',
       siguienteAccion: 'Siguiente acción:', sinReglaTexto: 'Ninguna regla se disparó con las respuestas actuales.',
       labelAjusteCalificacion: 'Confirmar o ajustar calificación', sinFlagsDetectados: 'Sin flags detectados.',
-      tituloProgreso: 'Progreso de la llamada', sufijoProgreso: '% completado',
+      tituloProgreso: 'Progreso de la llamada',
       tituloEvalContinua: 'Evaluación continua', sinIndicadores: 'Sin indicadores continuos.', clickParaCambiar: 'click para cambiar',
       tituloResumen: 'Resumen en vivo', sinRespuestas: 'Todavía no hay respuestas.',
+      tituloFlagsAutomaticos: 'Flags automáticos',
       llamadaGuardada: 'Llamada guardada correctamente.', problemaGuardar: 'Hubo un problema al guardar: ',
       alertaContratoVacio: 'Escribe un número de contrato para buscar.', sinHistorico: 'No se encontró historial para ese contrato.',
       historicoTitulo: 'Última llamada registrada:', historicoFecha: 'Fecha:', historicoPrograma: 'Programa:',
@@ -112,9 +113,10 @@
       sinReglaBadge: 'No rule triggered', razonInterna: 'Internal reason:', validacionEsa: 'ESA validation:',
       siguienteAccion: 'Next action:', sinReglaTexto: 'No rule was triggered with the current answers.',
       labelAjusteCalificacion: 'Confirm or adjust rating', sinFlagsDetectados: 'No flags detected.',
-      tituloProgreso: 'Call progress', sufijoProgreso: '% complete',
+      tituloProgreso: 'Call progress',
       tituloEvalContinua: 'Ongoing evaluation', sinIndicadores: 'No ongoing indicators.', clickParaCambiar: 'click to change',
       tituloResumen: 'Live summary', sinRespuestas: 'No answers yet.',
+      tituloFlagsAutomaticos: 'Automatic flags',
       llamadaGuardada: 'Call saved successfully.', problemaGuardar: 'There was a problem saving: ',
       alertaContratoVacio: 'Enter a contract number to search.', sinHistorico: 'No history found for that contract.',
       historicoTitulo: 'Last call on record:', historicoFecha: 'Date:', historicoPrograma: 'Program:',
@@ -152,7 +154,20 @@
     state.idioma = idioma;
     aplicarIdiomaEstatico();
     if (state.data && state.fases.length) renderContent();
+    ajustarAltoTopbar(); // el texto traducido puede cambiar de largo y mover el ancho al que el topbar envuelve
   }
+
+  // El topbar tiene varios campos y puede envolver a una o dos lineas segun
+  // el ancho de ventana o el idioma -- se mide su alto real en vez de
+  // asumir un numero fijo, para que el sidebar/panel derecho (que usan
+  // --topbar-alto como offset de su position:sticky) nunca queden tapados
+  // ni dejen un hueco debajo.
+  function ajustarAltoTopbar() {
+    const topbar = document.querySelector('.topbar');
+    if (!topbar || topbar.getBoundingClientRect().height === 0) return; // oculta (lock-screen) todavia
+    document.documentElement.style.setProperty('--topbar-alto', topbar.getBoundingClientRect().height + 'px');
+  }
+  window.addEventListener('resize', ajustarAltoTopbar);
 
   // Traduce el HTML estatico (marcado con data-i18n / data-i18n-placeholder
   // en Index.html) y resalta el boton de idioma activo.
@@ -252,6 +267,23 @@
       alert(t('alertaCargandoPrograma'));
       return;
     }
+    // Por si "Reiniciar" alguna vez no logra recargar la pagina de verdad
+    // (ver reiniciar()) -- segunda capa de defensa para que una llamada
+    // nueva nunca arranque con respuestas/estado de la anterior todavia
+    // en memoria (eso se veia como progreso o notas que no correspondian
+    // a nada contestado en la pantalla).
+    state.respuestas = {};
+    state.mostrarOtroPara = {};
+    state.continuas = {};
+    state.incidentes = [];
+    state.modoCaptura = null;
+    state.reglasDisparadas = [];
+    state.checkpointOverride = null;
+    state.filaCalificacion = null;
+    state.mostrandoNotas = false;
+    state.llamadaGuardadaOk = false;
+    state.variables = {};
+
     state.agente = agente;
     state.programa = programa;
     state.contrato = contrato;
@@ -260,21 +292,35 @@
     state.variables['CLIENT_NAME'] = cliente;
     if (hotel) state.variables['HOTEL_NAME'] = hotel;
     state.startTime = Date.now();
+    iniciarCronometro();
     document.getElementById('tb-agente').textContent = agente;
     document.getElementById('tb-programa').textContent = programa;
     document.getElementById('tb-contrato').value = contrato;
     document.getElementById('tb-cliente').value = cliente;
     document.getElementById('lock-screen').style.display = 'none';
     document.getElementById('app').style.display = 'block';
+    ajustarAltoTopbar();
     buildSidebar();
   }
 
-  // Los Web Apps de Apps Script sirven el contenido dentro de un iframe --
-  // recargar ese iframe directo (location.reload) puede dejarlo en blanco.
-  // Navegar la ventana de arriba (top) fuerza una carga limpia desde cero.
+  // Los Web Apps de Apps Script sirven el contenido dentro de un iframe de
+  // OTRO origen (script.google.com por fuera, script.googleusercontent.com
+  // por dentro) -- por eso "top" es una ventana cross-origin. El navegador
+  // permite ESCRIBIR top.location.href (navegar) pero NO permite LEERLA
+  // (lanza SecurityError en silencio, que es justo el bug reportado: el
+  // confirm() se ve, "Aceptar" no hace nada visible porque la excepcion
+  // ocurre despues, sin ningun catch). document.referrer si es legible sin
+  // restriccion cross-origin y trae la URL real del Web App que cargo este
+  // iframe -- por eso se usa esa en vez de leer top.location.href.
   function reiniciar() {
     if (!confirm(t('confirmReiniciar'))) return;
-    top.location.href = top.location.href;
+    try {
+      if (top === window) { location.reload(); return; } // visor local: no hay iframe
+      top.location.href = document.referrer || window.location.href;
+    } catch (e) {
+      console.error('No se pudo reiniciar navegando top.location, recargando este marco:', e);
+      location.reload();
+    }
   }
 
   // ---- Utilidades ----
@@ -374,8 +420,15 @@
   // ---- Tipos de contenido ----
   // Conjunto cerrado de 8 tipos (post-migracion) -- solo normaliza mayusculas/espacios.
 
+  // Se llama por cada fila en casi todo el archivo (filtros, sort, render) --
+  // nunca debe tirar la pagina entera por una celda Tipo con un valor
+  // inesperado del Sheet, asi que no deja escapar ninguna excepcion.
   function tipoCategoria(tipo) {
-    return (tipo || '').toString().trim().toUpperCase();
+    try {
+      return (tipo || '').toString().trim().toUpperCase();
+    } catch (e) {
+      return '';
+    }
   }
 
   // ---- Sidebar / Fases ----
@@ -463,8 +516,20 @@
 
   function renderContent() {
     if (state.mostrandoNotas) return; // la caja de notas ya esta pintada, no se pisa con el flujo
-    if (state.modoCaptura) renderCapturaFueraDeOrden();
-    else renderFlujoContinuo();
+    try {
+      if (state.modoCaptura) renderCapturaFueraDeOrden();
+      else renderFlujoContinuo();
+    } catch (e) {
+      // Red de seguridad ademas de renderFilaSegura(): si el error ocurre
+      // ANTES del loop de filas (ej. todasLasFilasVisibles() con una fila
+      // rara), renderFlujoContinuo() nunca llega a renderPanel()/
+      // renderSidebarNav() -- eso dejaba el panel derecho y el sidebar
+      // vacios o congelados sin relacion con lo que se veia (o no se veia)
+      // en el centro. Aqui se intentan igual, aislados el uno del otro.
+      console.error('Error renderizando el contenido:', e);
+      try { renderPanel(); } catch (e2) { console.error('Panel tambien fallo:', e2); }
+      try { renderSidebarNav(); } catch (e2) { console.error('Sidebar tambien fallo:', e2); }
+    }
   }
 
   function todasLasFilasVisibles() {
@@ -518,6 +583,26 @@
     return h;
   }
 
+  // Una sola fila con datos inesperados del Sheet (Tipo raro, Opciones mal
+  // formadas, etc.) no debe tumbar el render de TODO lo que sigue -- eso
+  // dejaba el sidebar y el panel derecho congelados en el estado de la fase
+  // anterior (desincronizados de lo que en verdad se veia en el centro) o
+  // directamente vacios, porque renderPanel()/renderSidebarNav() nunca
+  // llegaban a correr. Si una fila falla, se omite (y se reporta en
+  // consola) pero el resto de filas, el panel y el sidebar se actualizan
+  // igual.
+  function renderFilaSegura(fila) {
+    try {
+      const el = renderFila(fila);
+      const sub = tipoCategoria(fila.Tipo) === 'PANEL_INFO' ? subtipoPanelInfo(fila) : null;
+      const bloquea = filaBloquea(fila);
+      return { el, sub, bloquea };
+    } catch (e) {
+      console.error('Fila con error al renderizar (se omite):', fila.Question_ID || fila.Fase, e);
+      return { el: null, sub: null, bloquea: false };
+    }
+  }
+
   function renderFlujoContinuo() {
     const content = document.getElementById('content');
     content.innerHTML = '';
@@ -533,15 +618,10 @@
         faseAnterior = fila.Fase;
       }
 
-      const el = renderFila(fila);
+      const { el, sub, bloquea } = renderFilaSegura(fila);
       if (el) content.appendChild(el);
-
-      if (tipoCategoria(fila.Tipo) === 'PANEL_INFO') {
-        const sub = subtipoPanelInfo(fila);
-        if (sub === 'CALIFICACION' || sub === 'FLAGS') necesitaEvaluacion = true;
-      }
-
-      if (filaBloquea(fila)) break;
+      if (sub === 'CALIFICACION' || sub === 'FLAGS') necesitaEvaluacion = true;
+      if (bloquea) break;
     }
 
     if (necesitaEvaluacion) evaluarYActualizarCheckpoint();
@@ -574,12 +654,9 @@
 
     let necesitaEvaluacion = false;
     filas.forEach(fila => {
-      const el = renderFila(fila);
+      const { el, sub } = renderFilaSegura(fila);
       if (el) content.appendChild(el);
-      if (tipoCategoria(fila.Tipo) === 'PANEL_INFO') {
-        const sub = subtipoPanelInfo(fila);
-        if (sub === 'CALIFICACION' || sub === 'FLAGS') necesitaEvaluacion = true;
-      }
+      if (sub === 'CALIFICACION' || sub === 'FLAGS') necesitaEvaluacion = true;
     });
 
     if (!filas.length) {
@@ -1269,39 +1346,36 @@
 
   // ---- Panel derecho ----
 
-  // Orden fijo: Progreso -> Puntos criticos -> Finalizar llamada ->
-  // Evaluacion continua -> Resumen en vivo.
+  // Orden fijo en el panel: Puntos criticos -> Finalizar llamada ->
+  // Evaluacion continua -> Resumen en vivo -> Flags automaticos -> Tips
+  // hotel. El Progreso vive en la barra superior (actualizarProgresoTopbar),
+  // no aqui. Cada seccion corre aislada (try/catch): si UNA falla por datos
+  // raros del Sheet, las demas -- el boton Finalizar incluido -- se siguen
+  // pintando en vez de desaparecer todas juntas.
   function renderPanel() {
     const panel = document.getElementById('right-panel');
     panel.innerHTML = '';
 
-    renderProgresoEnPanel(panel);
-    renderPuntosCriticosEnPanel(panel);
-    renderBotonFinalizarEnPanel(panel);
-    renderEvaluacionContinuaEnPanel(panel);
-    renderResumenEnPanel(panel);
-    renderTipsHotelEnPanel(panel);
+    try { actualizarProgresoTopbar(); } catch (e) { console.error('Progreso en topbar con error:', e); }
+
+    [renderPuntosCriticosEnPanel, renderBotonFinalizarEnPanel,
+      renderEvaluacionContinuaEnPanel, renderResumenEnPanel, renderFlagsAutomaticosEnPanel,
+      renderTipsHotelEnPanel].forEach(fn => {
+      try { fn(panel); } catch (e) { console.error('Seccion del panel con error (se omite):', fn.name, e); }
+    });
   }
 
-  function renderProgresoEnPanel(panel) {
-    const tituloProgreso = document.createElement('div');
-    tituloProgreso.className = 'rp-title';
-    tituloProgreso.textContent = t('tituloProgreso');
-    panel.appendChild(tituloProgreso);
-
+  // El indicador de Progreso vive en la barra superior (no en el panel
+  // derecho) para que quede visible todo el tiempo sin ocupar espacio del
+  // panel -- se actualiza junto con el resto de renderPanel().
+  function actualizarProgresoTopbar() {
     const progreso = calcularProgreso();
-    const barraWrap = document.createElement('div');
-    barraWrap.className = 'progreso-wrap';
-    const barra = document.createElement('div');
-    barra.className = 'progreso-barra';
-    barra.style.width = progreso + '%';
-    barraWrap.appendChild(barra);
-    panel.appendChild(barraWrap);
-
-    const progresoTexto = document.createElement('div');
-    progresoTexto.className = 'progreso-texto';
-    progresoTexto.textContent = progreso + t('sufijoProgreso');
-    panel.appendChild(progresoTexto);
+    const mini = document.getElementById('tb-progreso-mini');
+    const barra = document.getElementById('tb-progreso-barra');
+    const texto = document.getElementById('tb-progreso-texto');
+    if (mini) mini.title = t('tituloProgreso') + ': ' + progreso + '%';
+    if (barra) barra.style.width = progreso + '%';
+    if (texto) texto.textContent = progreso + '%';
   }
 
   // "Punto critico" = fila con Critico = SI (columna separada de Obligatorio;
@@ -1428,8 +1502,30 @@
         panel.appendChild(item);
       });
     }
+  }
 
-    detectarFlagsAutomaticos().forEach(flag => {
+  // Seccion separada de Resumen en vivo -- antes vivian en la misma caja y
+  // un flag SI podia aparecer justo debajo del mensaje "Todavia no hay
+  // respuestas" (detectarFlagsAutomaticos() no depende de que la pregunta
+  // este mapeada en Notes_USP con Titulo_Corto, solo de la respuesta exacta),
+  // lo que se leia como una contradiccion. Cada seccion tiene ahora su
+  // propio titulo y su propio estado vacio.
+  function renderFlagsAutomaticosEnPanel(panel) {
+    const titulo = document.createElement('div');
+    titulo.className = 'rp-title';
+    titulo.style.marginTop = '18px';
+    titulo.textContent = t('tituloFlagsAutomaticos');
+    panel.appendChild(titulo);
+
+    const flags = detectarFlagsAutomaticos();
+    if (!flags.length) {
+      const vacio = document.createElement('div');
+      vacio.className = 'empty-state';
+      vacio.textContent = t('sinFlagsDetectados');
+      panel.appendChild(vacio);
+      return;
+    }
+    flags.forEach(flag => {
       const item = document.createElement('div');
       item.className = 'checklist-item flag-item flag-' + flag.tipo;
       item.textContent = (flag.tipo === 'green' ? '🟢 ' : '🔴 ') + flag.texto;
@@ -1480,6 +1576,30 @@
   function calcularDuracionMinutos() {
     if (!state.startTime) return 0;
     return Math.round((Date.now() - state.startTime) / 60000);
+  }
+
+  // Cronometro interno de la llamada -- discreto en la barra superior
+  // (mm:ss), usa el mismo state.startTime que ya alimenta
+  // REGISTROS.Duracion via calcularDuracionMinutos()/guardarLlamadaAhora(),
+  // asi que lo que se ve y lo que se guarda siempre coinciden.
+  let cronometroInterval = null;
+
+  function formatoDuracion(segundosTotales) {
+    const m = Math.floor(segundosTotales / 60).toString().padStart(2, '0');
+    const s = Math.floor(segundosTotales % 60).toString().padStart(2, '0');
+    return m + ':' + s;
+  }
+
+  function actualizarCronometro() {
+    const el = document.getElementById('tb-duracion');
+    if (!el || !state.startTime) return;
+    el.textContent = formatoDuracion((Date.now() - state.startTime) / 1000);
+  }
+
+  function iniciarCronometro() {
+    if (cronometroInterval) clearInterval(cronometroInterval);
+    actualizarCronometro();
+    cronometroInterval = setInterval(actualizarCronometro, 1000);
   }
 
   // ---- Topbar: contrato / cliente ----

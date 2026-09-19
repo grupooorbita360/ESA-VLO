@@ -73,6 +73,11 @@
       <div class="topbar-field"><span class="tb-label" data-i18n="labelCliente">Cliente</span>
         <input id="tb-cliente" type="text" oninput="onVariableChange('CLIENT_NAME', this.value)">
       </div>
+      <div class="topbar-field"><span title="Duración de la llamada">⏱</span><span id="tb-duracion" class="tb-duracion">00:00</span></div>
+      <div class="topbar-field tb-progreso-mini" id="tb-progreso-mini">
+        <div class="tb-progreso-barra-wrap"><div class="tb-progreso-barra" id="tb-progreso-barra" style="width:0%"></div></div>
+        <span id="tb-progreso-texto">0%</span>
+      </div>
       <div class="topbar-field">
         <button class="btn-mini" id="btn-idioma-es" onclick="cambiarIdioma('ES')">ES</button>
         <button class="btn-mini" id="btn-idioma-en" onclick="cambiarIdioma('EN')">EN</button>
