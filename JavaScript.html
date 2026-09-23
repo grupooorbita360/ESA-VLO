@@ -1354,31 +1354,38 @@
     estado.textContent = t('guardando');
     content.appendChild(estado);
 
+    // Tarjetas de 3 columnas, una identidad de color por categoria (VLO
+    // azul, MKT verde/teal, RED violeta) -- opcion A del mockup aprobada.
+    // copiarAlPortapapeles() usa su propio textarea oculto para copiar, asi
+    // que el texto visible puede ser un div normal en vez de un textarea.
+    const grid = document.createElement('div');
+    grid.className = 'notas-grid';
     ['VLO', 'MKT', 'RED'].forEach(col => {
-      const bloque = document.createElement('div');
-      bloque.className = 'block';
-      const label = document.createElement('div');
-      label.className = 'block-label';
-      label.textContent = col;
-      bloque.appendChild(label);
-
       const texto = (secciones[col] || []).join('\n');
-      const textarea = document.createElement('textarea');
-      textarea.className = 'free-text';
-      textarea.rows = 5;
-      textarea.readOnly = true;
-      textarea.value = texto || t('sinNotasCategoria');
-      bloque.appendChild(textarea);
 
+      const card = document.createElement('div');
+      card.className = 'nota-card ' + col.toLowerCase();
+
+      const header = document.createElement('div');
+      header.className = 'nota-card-header';
+      const label = document.createElement('span');
+      label.textContent = col;
+      header.appendChild(label);
       const copiarBtn = document.createElement('button');
-      copiarBtn.className = 'btn-mini';
-      copiarBtn.style.marginTop = '6px';
+      copiarBtn.className = 'nota-card-copy';
       copiarBtn.textContent = t('btnCopiar');
       copiarBtn.onclick = () => copiarAlPortapapeles(texto, copiarBtn);
-      bloque.appendChild(copiarBtn);
+      header.appendChild(copiarBtn);
+      card.appendChild(header);
 
-      content.appendChild(bloque);
+      const body = document.createElement('div');
+      body.className = 'nota-card-body' + (texto ? '' : ' vacio');
+      body.textContent = texto || t('sinNotasCategoria');
+      card.appendChild(body);
+
+      grid.appendChild(card);
     });
+    content.appendChild(grid);
 
     // "Volver al flujo" no aplica aqui -- la llamada ya se dio por
     // terminada al llegar a esta pantalla (el cronometro se detuvo, ver
