@@ -4,6 +4,15 @@
   <base target="_top">
   <meta charset="utf-8">
   <?!= include('Stylesheet'); ?>
+  <script>
+    // URL real de este Web App (la misma que aparece en la barra de direcciones
+    // del navegador: .../exec o .../dev segun como se este probando), resuelta
+    // en el SERVIDOR con ScriptApp.getService().getUrl() -- ver reiniciar() en
+    // JavaScript.html para el motivo (top.location.href no se puede LEER desde
+    // este iframe porque es de otro origen, asi que no se puede reconstruir
+    // esa URL desde el cliente).
+    window.WEBAPP_URL = <?!= JSON.stringify(ScriptApp.getService().getUrl() || '') ?>;
+  </script>
 </head>
 <body>
 

@@ -106,4 +106,15 @@
   .fase-header { margin:28px 0 14px; padding-top:14px; border-top:2px solid var(--border); font-size:12px; font-weight:700; color:var(--accent); text-transform:uppercase; letter-spacing:.04em; }
   .fase-header:first-child { margin-top:0; padding-top:0; border-top:none; }
   .captura-banner { background:#fff7ed; border:1px solid var(--orange); border-radius:8px; padding:10px 14px; margin-bottom:10px; font-size:12.5px; }
+
+  /* Modal propio -- reemplaza alert()/confirm() nativos del navegador (feos
+     y, en el caso de confirm(), bloqueantes de un modo que no combina bien
+     con el iframe sandboxeado de Apps Script). Un solo componente para
+     mensaje simple (1 boton) o confirmacion (2 botones). */
+  .modal-overlay { position:fixed; inset:0; background:rgba(15,23,42,.45); display:flex; align-items:center; justify-content:center; z-index:100; }
+  .modal-card { background:#fff; border-radius:12px; padding:22px 24px; width:340px; max-width:calc(100vw - 32px); box-shadow:0 12px 32px rgba(0,0,0,.22); }
+  .modal-mensaje { font-size:13.5px; line-height:1.55; white-space:pre-line; color:var(--ink); margin-bottom:18px; }
+  .modal-acciones { display:flex; justify-content:flex-end; gap:8px; }
+  .modal-acciones .btn-mini { padding:8px 16px; font-size:12.5px; background:var(--bg-soft); color:var(--ink); border:1px solid var(--border); }
+  .modal-acciones .btn-mini.modal-btn-primario { background:var(--accent); color:#fff; border-color:var(--accent); font-weight:600; }
 </style>

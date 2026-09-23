@@ -53,6 +53,7 @@
     ES: {
       labelAgente: 'Agente', labelPrograma: 'Programa', labelContrato: 'Contrato', labelCliente: 'Cliente', labelHotel: 'Hotel',
       btnEntrar: 'Entrar', btnContinuar: 'Continuar', btnEmpezarLlamada: 'Empezar llamada',
+      btnOk: 'Entendido', btnCancelar: 'Cancelar', btnAceptar: 'Aceptar', btnNuevaLlamada: 'Nueva llamada',
       btnReiniciar: 'Reiniciar', btnBuscar: 'Buscar', btnQuitar: 'Quitar',
       placeholderContrato: 'Numero de contrato', placeholderCliente: 'Nombre del cliente', placeholderHotel: 'Codigo del hotel (opcional, ej. SR1)',
       placeholderContratoTopbar: 'Escribe o busca...', placeholderCampoPasivo: 'Se llena solo si surge...', placeholderOtro: 'Especifica...',
@@ -92,6 +93,7 @@
     EN: {
       labelAgente: 'Agent', labelPrograma: 'Program', labelContrato: 'Contract', labelCliente: 'Client', labelHotel: 'Hotel',
       btnEntrar: 'Enter', btnContinuar: 'Continue', btnEmpezarLlamada: 'Start call',
+      btnOk: 'Got it', btnCancelar: 'Cancel', btnAceptar: 'Accept', btnNuevaLlamada: 'New call',
       btnReiniciar: 'Restart', btnBuscar: 'Search', btnQuitar: 'Remove',
       placeholderContrato: 'Contract number', placeholderCliente: 'Client name', placeholderHotel: 'Hotel code (optional, e.g. SR1)',
       placeholderContratoTopbar: 'Type or search...', placeholderCampoPasivo: 'Only fill in if it comes up...', placeholderOtro: 'Specify...',
@@ -169,6 +171,50 @@
   }
   window.addEventListener('resize', ajustarAltoTopbar);
 
+  // ---- Modal propio -- reemplaza TODOS los alert()/confirm() nativos del
+  // navegador con un componente unico y consistente (ver .modal-* en el
+  // Stylesheet). mostrarAlerta()/mostrarConfirmacion() devuelven una
+  // Promise; alerta se resuelve al cerrar, confirmacion con true/false
+  // segun el boton que se use.
+  function mostrarModal(mensaje, botones) {
+    return new Promise(resolve => {
+      const overlay = document.createElement('div');
+      overlay.className = 'modal-overlay';
+      const card = document.createElement('div');
+      card.className = 'modal-card';
+      const texto = document.createElement('div');
+      texto.className = 'modal-mensaje';
+      texto.textContent = mensaje;
+      card.appendChild(texto);
+
+      const acciones = document.createElement('div');
+      acciones.className = 'modal-acciones';
+      const cerrar = valor => { document.body.removeChild(overlay); resolve(valor); };
+      botones.forEach((b, idx) => {
+        const btn = document.createElement('button');
+        btn.className = 'btn-mini' + (b.primario ? ' modal-btn-primario' : '');
+        btn.textContent = b.texto;
+        btn.onclick = () => cerrar(b.valor);
+        acciones.appendChild(btn);
+        if (idx === botones.length - 1) setTimeout(() => btn.focus(), 0);
+      });
+      card.appendChild(acciones);
+      overlay.appendChild(card);
+      document.body.appendChild(overlay);
+    });
+  }
+
+  function mostrarAlerta(mensaje) {
+    return mostrarModal(mensaje, [{ texto: t('btnOk'), valor: true, primario: true }]);
+  }
+
+  function mostrarConfirmacion(mensaje) {
+    return mostrarModal(mensaje, [
+      { texto: t('btnCancelar'), valor: false },
+      { texto: t('btnAceptar'), valor: true, primario: true }
+    ]);
+  }
+
   // Traduce el HTML estatico (marcado con data-i18n / data-i18n-placeholder
   // en Index.html) y resalta el boton de idioma activo.
   function aplicarIdiomaEstatico() {
@@ -190,7 +236,7 @@
 
   function onError(err) {
     console.error(err);
-    alert('Error: ' + (err && err.message ? err.message : err));
+    mostrarAlerta('Error: ' + (err && err.message ? err.message : err));
   }
 
   // ---- Carga inicial (lock screen, 3 pasos: Agente -> Programa -> Datos del caso) ----
@@ -233,6 +279,28 @@
     if (data && data.error) { onError(data.error); return; }
     state.data = data;
     state.titulosCortos = construirMapaTitulosCortos();
+    diagnosticarNotesVacio(data);
+  }
+
+  // Las notas de Finalizar llamada y el Resumen en vivo dependen 100% de
+  // que Notes traiga filas Y de que esas filas tengan Seccion / Campo +
+  // Titulo_Corto con esos nombres de columna exactos. Si algo de eso falla
+  // se ve identico desde la UI (notas vacias) pero la causa es distinta --
+  // este aviso en consola distingue los dos casos sin tener que adivinar.
+  function diagnosticarNotesVacio(data) {
+    const notes = data && data.notes;
+    if (!notes || !notes.length) {
+      console.warn('[ESA-VLO] Notes vino vacio del servidor para este programa. Revisa: (1) CONFIG_PRODUCTS.Sufijo tiene el valor correcto para este programa (ej. "USP"), y (2) la columna Program en la pestaña Notes usa ese mismo valor en sus filas.');
+      return;
+    }
+    const primeraConTitulo = notes.find(n => n.Titulo_Corto);
+    if (!primeraConTitulo) {
+      console.warn('[ESA-VLO] Notes trajo ' + notes.length + ' fila(s) pero ninguna tiene la columna "Titulo_Corto" con contenido. Columnas reales de la primera fila:', Object.keys(notes[0]));
+      return;
+    }
+    if (!idsDeSeccion(primeraConTitulo['Seccion / Campo']).length) {
+      console.warn('[ESA-VLO] Notes tiene Titulo_Corto pero la columna "Seccion / Campo" no se encontro o vino vacia (se esperaba ese nombre exacto). Columnas reales de esa fila:', Object.keys(primeraConTitulo));
+    }
   }
 
   // Muestra un solo paso del lock-screen a la vez (1=Agente, 2=Programa, 3=Datos del caso).
@@ -245,13 +313,13 @@
 
   function avanzarPaso1() {
     const agente = document.getElementById('sel-agente').value;
-    if (!agente) { alert(t('alertaSeleccionaAgente')); return; }
+    if (!agente) { mostrarAlerta(t('alertaSeleccionaAgente')); return; }
     mostrarPasoLock(2);
   }
 
   function avanzarPaso2() {
     const programa = document.getElementById('sel-programa').value;
-    if (!programa) { alert(t('alertaSeleccionaPrograma')); return; }
+    if (!programa) { mostrarAlerta(t('alertaSeleccionaPrograma')); return; }
     cargarDatosPrograma(programa);
     mostrarPasoLock(3);
   }
@@ -262,9 +330,9 @@
     const contrato = document.getElementById('lock-contrato').value.trim();
     const cliente = document.getElementById('lock-cliente').value.trim();
     const hotel = document.getElementById('lock-hotel').value.trim(); // unico campo opcional de esta pantalla
-    if (!contrato || !cliente) { alert(t('alertaFaltaContratoCliente')); return; }
+    if (!contrato || !cliente) { mostrarAlerta(t('alertaFaltaContratoCliente')); return; }
     if (!state.data || !state.data.config || state.data.config['Product/Program'] !== programa) {
-      alert(t('alertaCargandoPrograma'));
+      mostrarAlerta(t('alertaCargandoPrograma'));
       return;
     }
     // Por si "Reiniciar" alguna vez no logra recargar la pagina de verdad
@@ -307,20 +375,30 @@
   // OTRO origen (script.google.com por fuera, script.googleusercontent.com
   // por dentro) -- por eso "top" es una ventana cross-origin. El navegador
   // permite ESCRIBIR top.location.href (navegar) pero NO permite LEERLA
-  // (lanza SecurityError en silencio, que es justo el bug reportado: el
-  // confirm() se ve, "Aceptar" no hace nada visible porque la excepcion
-  // ocurre despues, sin ningun catch). document.referrer si es legible sin
-  // restriccion cross-origin y trae la URL real del Web App que cargo este
-  // iframe -- por eso se usa esa en vez de leer top.location.href.
-  function reiniciar() {
-    if (!confirm(t('confirmReiniciar'))) return;
+  // (lanza SecurityError, que es el bug original: el confirm() se veia,
+  // "Aceptar" no hacia nada visible porque la excepcion pasaba despues sin
+  // ningun catch). El intento de arreglo con document.referrer fue PEOR
+  // (pantalla en blanco): el referrer de este iframe casi nunca es la URL
+  // real del Web App -- terminaba navegando top directo a la URL interna
+  // de script.googleusercontent.com (de un solo uso, pensada para vivir
+  // DENTRO de un iframe), que no carga bien como pagina de nivel superior.
+  // El fix correcto es no adivinar nada: Index.html ya incrusta
+  // window.WEBAPP_URL con ScriptApp.getService().getUrl(), resuelta en el
+  // SERVIDOR -- esa es la misma URL /exec o /dev que el navegador tiene en
+  // la barra de direcciones, sin necesidad de leer top.location.
+  function recargarWebApp() {
+    if (top === window) { location.reload(); return; } // visor local: no hay iframe
     try {
-      if (top === window) { location.reload(); return; } // visor local: no hay iframe
-      top.location.href = document.referrer || window.location.href;
+      if (window.WEBAPP_URL) { top.location.href = window.WEBAPP_URL; return; }
+      top.location.href = document.referrer || window.location.href; // ultimo recurso si el scriptlet no resolvio nada
     } catch (e) {
-      console.error('No se pudo reiniciar navegando top.location, recargando este marco:', e);
+      console.error('No se pudo navegar top.location, recargando este marco:', e);
       location.reload();
     }
+  }
+
+  function reiniciar() {
+    mostrarConfirmacion(t('confirmReiniciar')).then(ok => { if (ok) recargarWebApp(); });
   }
 
   // ---- Utilidades ----
@@ -775,10 +853,27 @@
         else delete state.respuestas[fila.Question_ID];
         renderPanel();
       };
+      habilitarAvanceAlSalir(inputOtro, fila.Fase, { enterAvanza: true });
       div.appendChild(inputOtro);
     }
 
     return div;
+  }
+
+  // Blur en cualquier campo de texto libre dispara el mismo scroll a la
+  // siguiente pregunta pendiente que ya usan los chips de opcion multiple --
+  // sin esto, escribir en un campo libre no movia el flujo para nada y el
+  // agente tenia que bajar a mano. En inputs de una sola linea (CAMPO_PASIVO,
+  // "Otro") Enter hace lo mismo porque ahi no tiene otro uso; en el textarea
+  // de LIBRE (puede llevar varias lineas) Enter se deja libre para el salto
+  // de linea y solo el blur dispara el avance.
+  function habilitarAvanceAlSalir(input, fase, opciones) {
+    input.addEventListener('blur', () => avanzarDentroDeFase(fase));
+    if (opciones && opciones.enterAvanza) {
+      input.addEventListener('keydown', e => {
+        if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+      });
+    }
   }
 
   function renderLibre(fila) {
@@ -794,6 +889,7 @@
     input.rows = 3;
     input.value = state.respuestas[fila.Question_ID] || '';
     input.oninput = () => { state.respuestas[fila.Question_ID] = input.value; renderPanel(); };
+    habilitarAvanceAlSalir(input, fila.Fase);
     div.appendChild(input);
     return div;
   }
@@ -813,6 +909,7 @@
     input.className = 'free-text';
     input.placeholder = t('placeholderCampoPasivo');
     input.value = state.respuestas[fila.Question_ID] || '';
+    habilitarAvanceAlSalir(input, fila.Fase, { enterAvanza: true });
     input.oninput = () => {
       state.respuestas[fila.Question_ID] = input.value;
       state.variables[normalizeKey(fila.Question_ID)] = input.value;
@@ -1179,7 +1276,8 @@
   }
 
   function buscarNotaDeQid(qid) {
-    return (state.data.notes || []).find(n => idsDeSeccion(n['Seccion / Campo']).includes(qid));
+    const buscado = (qid || '').toString().trim();
+    return (state.data.notes || []).find(n => idsDeSeccion(n['Seccion / Campo']).includes(buscado));
   }
 
   // Solo los 4 casos donde el Green/Red Flag se puede inferir de una
@@ -1236,7 +1334,7 @@
         setTimeout(() => { boton.textContent = original; }, 1500);
       }
     } catch (e) {
-      alert(texto);
+      mostrarAlerta(texto);
     }
     document.body.removeChild(textarea);
   }
@@ -1282,12 +1380,16 @@
       content.appendChild(bloque);
     });
 
-    const volverBtn = document.createElement('button');
-    volverBtn.className = 'btn-mini';
-    volverBtn.style.marginTop = '18px';
-    volverBtn.textContent = t('volverAlFlujo');
-    volverBtn.onclick = () => { state.mostrandoNotas = false; renderContent(); };
-    content.appendChild(volverBtn);
+    // "Volver al flujo" no aplica aqui -- la llamada ya se dio por
+    // terminada al llegar a esta pantalla (el cronometro se detuvo, ver
+    // abrirFinalizarLlamada()). La unica salida real es empezar una
+    // llamada nueva; no hace falta confirmar, los datos ya se guardaron.
+    const nuevaBtn = document.createElement('button');
+    nuevaBtn.className = 'action-btn';
+    nuevaBtn.style.marginTop = '18px';
+    nuevaBtn.textContent = t('btnNuevaLlamada');
+    nuevaBtn.onclick = recargarWebApp;
+    content.appendChild(nuevaBtn);
   }
 
   // Guarda una sola vez por llamada -- si el agente vuelve a abrir la caja de
@@ -1317,13 +1419,14 @@
         if (estado) estado.textContent = t('llamadaGuardada');
       } else {
         if (estado) estado.textContent = t('problemaGuardar') + resp;
-        alert(t('problemaGuardar') + resp);
+        mostrarAlerta(t('problemaGuardar') + resp);
       }
     }).withFailureHandler(onError).guardarLlamada(datos);
   }
 
   function abrirFinalizarLlamada() {
     state.mostrandoNotas = true;
+    if (cronometroInterval) { clearInterval(cronometroInterval); cronometroInterval = null; } // la llamada ya termino conceptualmente aqui
     renderCajaNotas(generarNotas());
     if (!state.llamadaGuardadaOk) {
       guardarLlamadaAhora();
@@ -1618,13 +1721,13 @@
 
   function buscarHistorico() {
     const contrato = document.getElementById('tb-contrato').value.trim();
-    if (!contrato) { alert(t('alertaContratoVacio')); return; }
+    if (!contrato) { mostrarAlerta(t('alertaContratoVacio')); return; }
     google.script.run.withSuccessHandler(mostrarHistorico).withFailureHandler(onError).buscarContratoHistorico(contrato);
   }
 
   function mostrarHistorico(resultado) {
-    if (!resultado) { alert(t('sinHistorico')); return; }
-    if (typeof resultado === 'string') { alert(resultado); return; }
+    if (!resultado) { mostrarAlerta(t('sinHistorico')); return; }
+    if (typeof resultado === 'string') { mostrarAlerta(resultado); return; }
     const r = resultado.registro;
     let texto = t('historicoTitulo') + '\n' +
       t('historicoFecha') + ' ' + r.Fecha + '\n' + t('historicoPrograma') + ' ' + r.Programa + '\n' + t('historicoAgente') + ' ' + r.Agente +
@@ -1633,6 +1736,6 @@
       texto += '\n\n' + t('historicoIncidentesTitulo') + '\n' +
         resultado.incidentes.map(i => '- ' + i.Incidente_ID + ' (' + i.Color + ')').join('\n');
     }
-    alert(texto);
+    mostrarAlerta(texto);
   }
 </script>
