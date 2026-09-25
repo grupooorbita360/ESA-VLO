@@ -868,7 +868,18 @@
   // de LIBRE (puede llevar varias lineas) Enter se deja libre para el salto
   // de linea y solo el blur dispara el avance.
   function habilitarAvanceAlSalir(input, fase, opciones) {
-    input.addEventListener('blur', () => avanzarDentroDeFase(fase));
+    input.addEventListener('blur', () => {
+      // El oninput de estos campos solo llama renderPanel() (no
+      // renderContent()) para no perder el foco/cursor en cada tecla que se
+      // escribe -- pero eso significaba que la siguiente pregunta, ya
+      // desbloqueada por esta respuesta, nunca llegaba a pintarse en el
+      // centro, y avanzarDentroDeFase() no encontraba a donde hacer scroll
+      // (bug real: escribir en "Otro"/campo libre dejaba de avanzar). Al
+      // perder el foco es seguro re-renderizar todo antes de buscar el
+      // siguiente pendiente.
+      renderContent();
+      avanzarDentroDeFase(fase);
+    });
     if (opciones && opciones.enterAvanza) {
       input.addEventListener('keydown', e => {
         if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
