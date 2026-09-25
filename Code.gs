@@ -25,14 +25,19 @@ function sheetToObjects(sheetName) {
   if (!sheet) return [];
   const values = sheet.getDataRange().getValues();
   if (values.length < 2) return [];
-  // Algunas pestañas tienen una fila de leyenda (fila 1 en cursiva) antes del encabezado real.
-  // Detectamos el encabezado real como la primera fila donde la celda A no está vacía
-  // Y la siguiente fila tampoco está vacía (evita confundir leyenda con encabezado).
+  // Algunas pestañas tienen una fila de leyenda (banner descriptivo, celda
+  // combinada) antes del encabezado real. Esa celda combinada NO siempre
+  // empieza en la columna A -- en Servicios/Politicas/Campos_Variables/Notes
+  // arranca en la B porque la A ahora es "Program" (bug real detectado: al
+  // buscar el texto largo solo en values[0][0], esas 4 pestañas nunca
+  // calzaban como leyenda, la fila 2 con los headers de verdad se leia como
+  // si fuera un dato mas, y Program quedaba undefined en todas las filas).
+  // Se detecta ahora sin importar en que columna cae: fila 0 con exactamente
+  // una celda no vacia y con texto largo.
   let headerRowIdx = 0;
   if (values.length > 1 && values[1].some(v => v !== '')) {
-    // si la fila 0 parece leyenda (una sola celda con texto largo) usamos fila 1 como header
-    const row0NonEmpty = values[0].filter(v => v !== '').length;
-    if (row0NonEmpty === 1 && values[0][0] && values[0][0].toString().length > 40) {
+    const celdasFila0 = values[0].filter(v => v !== '');
+    if (celdasFila0.length === 1 && celdasFila0[0].toString().length > 40) {
       headerRowIdx = 1;
     }
   }
